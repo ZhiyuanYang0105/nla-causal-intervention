@@ -1,0 +1,22 @@
+# exp01: LOCAL pilot — validate pipeline, calibrate manipulation-check thresholds,
+# estimate effect size / SD for power analysis. Runs on MacBook M5 / 16GB.
+extends: configs/default.yaml
+
+experiment:
+  id: exp01_pilot
+  description: "Local pilot: 5 core conditions (C0-C4), N=200, Llama-3.2-1B, ridge AR."
+
+data:
+  n_samples: 200          # local pilot (start 100 for a fast first pass)
+  max_snippet_tokens: 128
+
+ar:
+  type: readout           # recommended faithful AR; switch to bow for the fastest pass
+
+conditions:
+  enabled: [C0, C1, C2, C3, C4]   # core only for pilot
+
+stats:
+  # pilot: report descriptive + effect-size estimates to power the full run
+  power_target: 0.80
+  min_effect_dz: 0.40

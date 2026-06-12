@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nla-causal-intervention"
+version = "0.0.1"
+description = "Causal mediator intervention on NLA intermediate text (AV -> z -> AR): semantic vs surface/stego channel."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "pyyaml>=6.0",
+    "scipy>=1.11",        # Friedman, Wilcoxon
+    "statsmodels>=0.14",  # mixed effects, ANOVA
+    "pingouin>=0.5",      # paired tests, effect sizes
+    "scikit-learn>=1.3",
+    "pyarrow>=14.0",      # parquet
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+# LOCAL: frozen M (Llama-3.2-1B/3B) activation harvest + frozen-M readout (MPS).
+models = [
+    "torch>=2.2",
+    "transformers>=4.45",      # Llama-3.2
+    "datasets>=2.20",          # FineWeb (streaming)
+    "accelerate>=0.33",
+    "huggingface-hub>=0.24",
+]
+# Fast generation on Apple silicon (AV summaries + paraphrasing). Recommended locally.
+mlx = [
+    "mlx>=0.18",
+    "mlx-lm>=0.18",
+]
+# Text-side metrics (semantic sim on explanations for sim_zz' manipulation check).
+nlp = [
+    "sentence-transformers>=2.2",  # all-MiniLM-L6-v2
+    "python-Levenshtein>=0.21",
+]
+dev = ["pytest>=7.4", "ruff>=0.1", "black>=23.0", "jupyter>=1.0"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.black]
+line-length = 100

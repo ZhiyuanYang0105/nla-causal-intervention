@@ -1,0 +1,102 @@
+# Intervention conditions (treatment levels) applied to the mediator z.
+# Each maps to a transform in src/nla_intervention/conditions/.
+# semantic / surface / format flags document the (semantic x surface) design grid.
+
+baseline: C0          # reference condition for paired Δrecon
+floor: C9             # floor condition for normalization (optional)
+
+conditions:
+  # --- core (>=5, required) ---
+  - code: C0
+    name: original
+    transform: identity
+    semantic: high
+    surface: high
+    format: high
+    note: "no-op upper bound / baseline"
+
+  - code: C1
+    name: paraphrase_light
+    transform: paraphrase
+    params: {strength: light}
+    semantic: high
+    surface: mid
+    format: mid
+
+  - code: C2
+    name: paraphrase_strong
+    transform: paraphrase
+    params: {strength: strong}
+    semantic: high
+    surface: low
+    format: low
+    note: "heavy lexical+syntactic change, meaning preserved"
+
+  - code: C3
+    name: format_preserving_paraphrase
+    transform: format_preserving_paraphrase
+    params: {preserve_length: true, preserve_structure: true}
+    semantic: high
+    surface: mid
+    format: high
+    note: "isolates format/statistical channel (vs C2)"
+
+  - code: C4
+    name: semantic_drift_control
+    transform: semantic_drift
+    params: {preserve_length: true, preserve_format: true}
+    semantic: low
+    surface: mid
+    format: high
+    note: "negative control: changes meaning, keeps format/length"
+
+  # --- extended (optional) ---
+  - code: C5
+    name: synonym_substitution
+    transform: synonym_substitution
+    semantic: high
+    surface: mid
+    format: high
+    enabled: false
+
+  - code: C6
+    name: back_translation
+    transform: back_translation
+    params: {pivot_lang: de}
+    semantic: high
+    surface: low
+    format: low
+    enabled: false
+
+  - code: C7
+    name: token_shuffle
+    transform: token_shuffle
+    semantic: low
+    surface: high
+    format: low
+    note: "preserves bag-of-words, destroys syntax"
+    enabled: false
+
+  - code: C8
+    name: stopword_strip
+    transform: stopword_strip
+    semantic: high
+    surface: low
+    format: low
+    enabled: false
+
+  - code: C9
+    name: random_text
+    transform: random_text
+    params: {match_length: true}
+    semantic: low
+    surface: low
+    format: mid
+    note: "floor / lower bound"
+    enabled: false
+
+# manipulation-check thresholds (calibrate after pilot)
+manipulation_check:
+  tau_keep: 0.85    # semantic-preserving conditions must have sim_zz' >= this
+  tau_drift: 0.60   # drift condition must have sim_zz' <= this
+  drop_failed: true # drop samples failing the check in the primary analysis

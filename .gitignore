@@ -1,0 +1,28 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# data & results (keep dirs via .gitkeep, ignore contents)
+data/raw/*
+data/interim/*
+data/processed/*
+results/*
+!**/.gitkeep
+
+# notebooks
+.ipynb_checkpoints/
+
+# caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# secrets / local
+.env
+*.local.yaml
