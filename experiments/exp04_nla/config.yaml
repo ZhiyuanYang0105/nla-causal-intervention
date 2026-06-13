@@ -1,0 +1,31 @@
+# exp04: scaled faithful NLA — 2500 (h_l, summary) pairs, stabilized GRPO.
+extends: configs/default.yaml
+
+experiment:
+  id: exp04_nla
+  description: "Scaled faithful NLA: N=2500, warm-start + stabilized GRPO (replay + per-token KL)."
+
+target_model:
+  name: Qwen/Qwen2.5-0.5B
+  layer_l: 12
+  hidden_size: 896
+
+train:
+  warmstart_from: exp04_nla    # 2500 pairs (build_nla_data.py --out exp04_nla --n 2500)
+  lora_r: 8
+  ws_lr: 1.0e-4
+  ar_lr: 5.0e-4
+  weight_decay: 0.05
+  # GRPO (stabilized)
+  group: 8
+  grpo_batch: 4
+  kl_beta: 0.02
+  grpo_lr_av: 1.0e-5
+  grpo_lr_ar: 2.0e-4
+  ar_steps: 4                  # replay-buffer minibatch steps per GRPO step
+
+data:
+  seed: 20260612
+
+conditions:
+  enabled: [C0, C1, C2, C3, C4]

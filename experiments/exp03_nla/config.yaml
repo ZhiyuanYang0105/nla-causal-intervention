@@ -1,0 +1,28 @@
+# exp03: FAITHFUL local NLA — activation-injection AV + truncated AR + affine,
+# warm-start SFT + GRPO joint training (only Opus-4.6 -> Qwen2.5-0.5B differs from paper).
+extends: configs/default.yaml
+
+experiment:
+  id: exp03_nla
+  description: "Faithful NLA: AV(h_l)->z->AR(z)->ĥ, co-trained (warm-start + GRPO)."
+
+target_model:
+  name: Qwen/Qwen2.5-0.5B
+  layer_l: 12
+  hidden_size: 896
+
+train:
+  warmstart_from: exp03_nla    # combined ~700 (h_l, summary) pairs (build_nla_data.py)
+  lora_r: 8                    # smaller rank -> less overfit on small data
+  ws_lr: 1.0e-4
+  ar_lr: 5.0e-4               # AR/affine needs a higher LR than AV
+  weight_decay: 0.05
+  group: 6                     # GRPO group size (candidates per activation)
+  grpo_batch: 4
+  kl_beta: 0.02                # KL-to-init penalty (fluency)
+
+data:
+  seed: 20260612
+
+conditions:
+  enabled: [C0, C1, C2, C3, C4]

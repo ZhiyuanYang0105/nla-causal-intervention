@@ -1,5 +1,10 @@
 # 结果:exp02_open（本地真实 pilot）
 
+> ⚠️ **结论已作废（保留作过程记录/反面教材）**。此 pipeline 有两个硬伤:
+> (1) AV 用源文本摘要而非**激活**输入;(2) AV/AR **未联合训练**。隐写是联合训练的产物,
+> 不联合训练就不可能出现 → 这里测的不是真正的问题,"支持 H1"的结论无效。
+> 忠实复现见 [nla_faithful_findings.md](nla_faithful_findings.md)。
+
 **配置**:M = Qwen2.5-0.5B（冻结，layer 12，mean-pool，float32），AV = 训练-free 摘要 proxy
 （Qwen2.5-0.5B-Instruct，贪婪），AR = 冻结 readout + 闭式 ridge，N = 304（FineWeb），5 折 CV。
 硬件:MacBook M5 / 16GB / MPS。全本地。
