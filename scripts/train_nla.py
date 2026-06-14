@@ -75,11 +75,19 @@ def main() -> None:
 
     if args.grpo:
         tc = cfg["train"]
-        T.grpo_train(av, ar, H[tr],
+        # snapshot the warm-started AV as the FROZEN KL reference (paper: KL toward AV_init)
+        av.model.save_pretrained(out / "ckpt/av_init_lora")
+        ref_av = ActivationVerbalizer(mname, dtype=torch.float32,
+                                      adapter_path=str(out / "ckpt/av_init_lora"))
+        for p in ref_av.model.parameters():
+            p.requires_grad_(False)
+        ref_av.model.eval()
+        print("[grpo] 冻结 warm-start 后的 AV 作为 KL 参考 (AV_init)")
+        T.grpo_train(av, ar, H[tr], ref_av=ref_av,
                      steps=args.grpo_steps, group=tc.get("group", 8),
                      batch=tc.get("grpo_batch", 4), beta=tc.get("kl_beta", 0.02),
                      lr_av=tc.get("grpo_lr_av", 1e-5), lr_ar=tc.get("grpo_lr_ar", 2e-4),
-                     ar_steps=tc.get("ar_steps", 4), eval_H=H[ev])
+                     ar_steps=tc.get("ar_steps", 4), eval_H=H[ev][:100])  # 100-subset eval (faster)
         fve_g = T.eval_fve(av, ar, H[ev])
         print(f"GRPO 后 eval FVE: {fve_g:+.3f}")
 

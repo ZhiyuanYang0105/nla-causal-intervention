@@ -79,7 +79,7 @@ def warmstart(av, ar, H, summaries, *, epochs=5, lr=1e-4, ar_lr=None, batch=8,
 
 # --------------------------------------------------------------- GRPO joint
 
-def grpo_train(av, ar, H, *, steps=200, group=8, batch=4, beta=0.02,
+def grpo_train(av, ar, H, *, ref_av=None, steps=200, group=8, batch=4, beta=0.02,
                lr_av=1e-5, lr_ar=2e-4, ar_steps=4, ar_mb=16, buffer_cap=1024,
                max_new_tokens=32, eval_H=None, eval_every=10, log=print):
     """Joint training, STABILIZED. Each step:
@@ -87,7 +87,11 @@ def grpo_train(av, ar, H, *, steps=200, group=8, batch=4, beta=0.02,
       2) AV: GRPO with group-normalized advantage + PER-TOKEN KL to init (adapters off)
       3) AR: several minibatch MSE steps from a replay buffer of sampled (z, h)
     The replay buffer + multi-step AR cuts the high single-step variance that stalled
-    the naive version; per-token KL keeps the penalty O(1) instead of O(seq_len)."""
+    the naive version; per-token KL keeps the penalty O(1) instead of O(seq_len).
+
+    ref_av: FROZEN copy of the warm-started AV (= AV_φ_init). KL is taken toward it,
+    matching the paper. If None, falls back to the base model via disable_adapter()
+    (NOT faithful — that references pre-warm-start weights)."""
     opt_av = torch.optim.AdamW([p for p in av.model.parameters() if p.requires_grad], lr=lr_av)
     opt_ar = torch.optim.AdamW(ar.trainable_parameters(), lr=lr_ar)
     Ht = torch.tensor(np.asarray(H), dtype=torch.float32, device=ar.device)
@@ -113,8 +117,11 @@ def grpo_train(av, ar, H, *, steps=200, group=8, batch=4, beta=0.02,
             adv = (r - r.mean()) / (r.std() + 1e-6)
             for z, a in zip(zs, adv):
                 lp = av.sequence_logprob(h, z)[0]
-                with av.model.disable_adapter():
-                    lp_ref = av.sequence_logprob(h, z)[0].detach()
+                if ref_av is not None:                          # KL toward warm-started AV_init
+                    lp_ref = ref_av.sequence_logprob(h, z)[0].detach()
+                else:                                           # fallback: base model (not faithful)
+                    with av.model.disable_adapter():
+                        lp_ref = av.sequence_logprob(h, z)[0].detach()
                 ntok = max(1, len(av.tok(z, add_special_tokens=False).input_ids))
                 kl = (lp - lp_ref) / ntok                      # per-token KL surrogate
                 ((-(a.detach() * lp) + beta * kl) / (group * batch)).backward()

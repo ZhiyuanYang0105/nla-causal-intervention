@@ -114,20 +114,26 @@ def main() -> None:
         sims = df.groupby("condition")["sim_zz_prime"].mean().round(3)
         print("\nsim(z,z') 均值:"); print(sims.to_string())
 
-    # verdict
+    # verdict — RIGOROUS: require a significant omnibus before reading pairwise.
+    # (A single incoherent pairwise hit with a tiny effect size is NOT evidence.)
     sp = tbl.set_index("condition")
-    c123_sig = any(sp.loc[c, "significant"] for c in ["C1", "C2", "C3"] if c in sp.index)
-    c4_sig = sp.loc["C4", "significant"] if "C4" in sp.index else False
+    def _sig(c):
+        return c in sp.index and bool(sp.loc[c, "significant"])
+    n_sp_sig = sum(_sig(c) for c in ["C1", "C2", "C3"])
     print("\n=== 判定 ===")
-    if c123_sig:
-        print("语义保持改写显著降 FVE → 倾向 H2(表面/隐写通道):AV 把信息编码进了表面形式")
-    elif c4_sig:
-        print("仅语义漂移显著降 FVE,语义保持改写不显著 → 倾向 H1(语义通道)")
+    if omni["p_value"] >= 0.05:
+        print(f"omnibus 不显著 (Friedman p={omni['p_value']:.3f}) → UNDETERMINED:"
+              " 信号/功效不足,不能区分通道(单个 pairwise 命中不算证据)")
+    elif n_sp_sig >= 2 and not _sig("C4"):
+        print("多数语义保持改写显著降 FVE、漂移不显著 → 倾向 H2(表面/隐写通道)")
+    elif _sig("C4") and n_sp_sig == 0:
+        print("仅语义漂移显著降 FVE → 倾向 H1(语义通道)")
     else:
-        print("无显著效应(可能功效不足/FVE 信号弱)")
+        print("效应不一致 → UNDETERMINED")
 
     report = {"run": run_id, "n_eval": len(ev), "fve_median": g.to_dict(),
-              "friedman_p": omni["p_value"], "pairwise": tbl.to_dict(orient="records")}
+              "friedman_p": omni["p_value"], "verdict": "undetermined" if omni["p_value"] >= 0.05 else "see-pairwise",
+              "pairwise": tbl.to_dict(orient="records")}
     (out / "intervention_report.json").write_text(json.dumps(report, indent=2, default=str))
     print(f"\nwrote {out}/intervention_metrics.csv + intervention_report.json")
 
