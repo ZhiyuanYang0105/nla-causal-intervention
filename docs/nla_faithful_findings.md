@@ -99,6 +99,35 @@ Friedman **p=0.67**——无任何显著效应,效应量 dz≤0.07。操纵有�
 - 与早期"测不出"的本质区别:这次**方法完全正确**(真共训练 NLA、KL 修复、强基线 FVE、操纵有效),
   仍判不出是因为 **0.5B/2500 规模重建重尾、功效不足**——要判定需更大模型/数据。
 
+## 与论文的忠实度核查(完整对照)
+
+逐组件核对(论文 = transformer-circuits 2026,唯一许可替换:Opus 4.6/4.5 → Qwen2.5-0.5B)。
+
+### 与论文一致 ✅
+| 组件 | 论文 | 实现 |
+|--|--|--|
+| AV 激活注入 | 归一化单位 L2 + 固定常数缩放,替换 token embedding,T=1 采样 | `h/‖h‖·act_scale`,占一 embedding 槽,temperature=1.0 |
+| AR 结构 | 截断前 l 层 + 末 token layer-l 激活做 affine,z 套固定 prompt | 全模型取 `hidden_states[l]`(数值等价截断)+ affine + 固定 prompt |
+| 联合训练解耦 | AR 不回传 AV,AR 当固定打分器 | reward 在 `no_grad` 下用 AR;AV/AR 优化器独立 |
+| 组采样 | 每个 h_l 采样一组候选 z | `av.generate(h, n=group)` |
+| **KL → AV_init** | β·D_KL(AV_φ‖AV_φ_init),朝 warm-start 后的 AV | 冻结 warm-start AV 作 `ref_av`(**本轮修复**;旧版错朝底座) |
+| warm-start | (h_l,s) 训 AV、(s,h_l) 训 AR,s=文本摘要 | 同 |
+| FVE | 1 − ℒ/E‖h−h̄‖² | 同 |
+
+### 偏差 ⚠️(诚实列全)
+| # | 项 | 论文 | 实现 | 原因 |
+|--|--|--|--|--|
+| A | GRPO 目标 | 完整 GRPO(组相对优势 + **PPO clipped ratio** + KL) | 组相对优势×logprob + KL,**无 clipping**(≈REINFORCE+组基线) | 实现简化 |
+| B | reward | −log‖h−AR(z)‖² | −MSE(均值) | 实现简化 |
+| C | 微调方式 | M 的**完整副本全量微调** | **LoRA** 适配器(冻结底座) | 16GB 硬约束 |
+| D | 激活池化 | **末 token** | **mean-pool** | 末 token 本地 FVE 近零 |
+| E | AR 更新 | 当前采样 z 上**单步** | 回放缓冲 **4 步/轮** | 稳定 GRPO |
+| — | 模型 | Opus 4.6/4.5 | Qwen2.5-0.5B / -Instruct | 你许可的替换 |
+
+**结论**:**训练算法的结构与论文一致**(激活注入 AV、affine AR、解耦的 AV 强化 + AR 监督联合训练、KL-to-init、warm-start),
+且关键 KL bug 已修。但**非逐字符忠实**:#A(GRPO 简化掉 clipping)、#B(reward 非 log)是算法层简化,
+#C/#D/#E 是本地可行性/稳定性妥协。#A/#B/#E 原则上可改严格;#C/#D 受硬件/本地信号限制。
+
 ## 要真正测隐写,需要(任一/组合)
 
 1. **更大数据**:数千~上万 (h_l, summary) 对(主要成本是摘要生成)。

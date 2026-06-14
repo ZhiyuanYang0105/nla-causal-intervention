@@ -84,10 +84,17 @@ def grpo_train(av, ar, H, *, ref_av=None, steps=200, group=8, batch=4, beta=0.02
                max_new_tokens=32, eval_H=None, eval_every=10, log=print):
     """Joint training, STABILIZED. Each step:
       1) sample a group of z per activation, reward = -MSE (AR fixed scorer)
-      2) AV: GRPO with group-normalized advantage + PER-TOKEN KL to init (adapters off)
+      2) AV: group-relative advantage * logprob + PER-TOKEN KL to AV_init
       3) AR: several minibatch MSE steps from a replay buffer of sampled (z, h)
-    The replay buffer + multi-step AR cuts the high single-step variance that stalled
-    the naive version; per-token KL keeps the penalty O(1) instead of O(seq_len).
+
+    FAITHFULNESS NOTES (deviations from the paper, see docs/nla_faithful_findings.md):
+      - #A This is a SIMPLIFIED GRPO: group-relative REINFORCE + KL, WITHOUT the
+        PPO-style clipped importance ratio of canonical GRPO. An approximation.
+      - #B reward = -MSE (mean), whereas the paper uses r = -log||h - AR(z)||².
+      - #E AR uses a replay buffer with `ar_steps` updates/iteration, vs the paper's
+        single gradient step on the current sampled z (a stability choice).
+    Matches the paper: activation-input AV, affine AR, decoupled AV/AR updates,
+    group sampling, AR as fixed scorer, KL toward AV_init.
 
     ref_av: FROZEN copy of the warm-started AV (= AV_φ_init). KL is taken toward it,
     matching the paper. If None, falls back to the base model via disable_adapter()
