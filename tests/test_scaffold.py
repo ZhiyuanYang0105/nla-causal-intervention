@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from nla_intervention import conditions, metrics
-from nla_intervention.pipeline.runner import apply_condition
+from nla_intervention.conditions import apply_condition
 from nla_intervention.utils import load_config
 
 ROOT = Path(__file__).resolve().parents[1]

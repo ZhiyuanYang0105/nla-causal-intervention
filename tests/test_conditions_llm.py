@@ -3,7 +3,7 @@ import pytest
 
 from nla_intervention.conditions import get_transform
 from nla_intervention.conditions.rewriter import INSTRUCTIONS, FakeRewriter, LLMRewriter
-from nla_intervention.pipeline.runner import apply_condition
+from nla_intervention.conditions import apply_condition
 
 Z = "Explanation: this activation emphasizes the brown fox topic."
 

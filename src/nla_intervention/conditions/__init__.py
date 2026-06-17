@@ -36,6 +36,14 @@ def available() -> list[str]:
     return sorted(_REGISTRY)
 
 
+def apply_condition(z: str, condition: dict, rewriter=None) -> str:
+    """Apply a condition's transform to explanation text z. Model-free transforms ignore
+    `rewriter`; LLM-backed ones (paraphrase/drift/...) require it. Neutral helper shared
+    by both the faithful (nla) and the phase-1 (pipeline) code paths."""
+    fn = get_transform(condition["transform"])
+    return fn(z, rewriter=rewriter, **condition.get("params", {}))
+
+
 # --- transform stubs (implement at M2) -------------------------------------
 
 @register("identity")

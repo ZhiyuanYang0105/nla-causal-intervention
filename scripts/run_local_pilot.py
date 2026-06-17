@@ -33,7 +33,7 @@ import numpy as np
 import pandas as pd
 
 from nla_intervention import stats as S
-from nla_intervention.pipeline.runner import apply_condition
+from nla_intervention.conditions import apply_condition
 from nla_intervention.utils import load_config
 
 SUMMARY_PROMPT = (

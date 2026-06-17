@@ -13,19 +13,14 @@ from typing import Iterable
 import numpy as np
 
 from nla_intervention import metrics as M
-from nla_intervention.conditions import get_transform
+from nla_intervention.conditions import apply_condition  # neutral helper (re-exported here)
 from nla_intervention.pipeline import (
     ActivationReconstructor,
     ActivationVerbalizer,
     Observation,
 )
 
-
-def apply_condition(z: str, condition: dict, rewriter=None) -> str:
-    """Apply a single condition's transform to explanation text z. Model-free transforms
-    ignore `rewriter`; LLM-backed ones (paraphrase/drift/...) require it."""
-    fn = get_transform(condition["transform"])
-    return fn(z, rewriter=rewriter, **condition.get("params", {}))
+__all__ = ["run", "to_records", "apply_condition"]
 
 
 def run(

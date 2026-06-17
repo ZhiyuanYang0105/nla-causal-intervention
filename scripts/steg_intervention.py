@@ -25,7 +25,7 @@ from nla_intervention import stats as S
 from nla_intervention.conditions.rewriter import LLMRewriter
 from nla_intervention.nla.av import ActivationVerbalizer
 from nla_intervention.nla.ar import ActivationReconstructor
-from nla_intervention.pipeline.runner import apply_condition
+from nla_intervention.conditions import apply_condition
 from nla_intervention.utils import load_config
 import pandas as pd
 
