@@ -29,6 +29,7 @@ class HarvestConfig:
     eval_holdout_docs: int = 20_000   # only docs assigned to the eval split are yielded
     split: str = "eval"               # "eval" (disjoint) | "train"
     pooling: str = "last"             # "last" (paper) | "mean" — ONE vector per sample
+    normalize: bool = True            # unit-L2-normalize h_l (paper); keeps AV in / AR target / FVE consistent
     store_dtype: str = "float32"      # fp16 overflows on Qwen-style outlier activations
     batch_size: int = 16
     dtype: str = "float32"            # model compute dtype (fp16 can produce inf/nan)
@@ -100,7 +101,10 @@ def harvest_activations(cfg: HarvestConfig | None = None, **overrides) -> Iterat
             pos = torch.arange(mask.size(1), device=mask.device)
             last_idx = (mask * pos).argmax(dim=1)
             pooled = h[torch.arange(h.size(0)), last_idx]
-        pooled = pooled.float().cpu().numpy().astype(cfg.store_dtype)   # fp16 by default
+        if cfg.normalize:                                   # paper: normalize h_l to unit L2.
+            pooled = pooled / (pooled.norm(dim=1, keepdim=True) + 1e-6)  # keeps AV input,
+            #                                                    AR target, and FVE consistent.
+        pooled = pooled.float().cpu().numpy().astype(cfg.store_dtype)
         for it, vec in zip(items, pooled):
             yielded += 1
             yield {

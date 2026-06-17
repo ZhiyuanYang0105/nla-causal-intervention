@@ -96,9 +96,8 @@ def grpo_train(av, ar, H, *, ref_av=None, steps=200, group=8, batch=4, beta=0.02
     Matches the paper: activation-input AV, affine AR, decoupled AV/AR updates,
     group sampling, AR as fixed scorer, KL toward AV_init.
 
-    ref_av: FROZEN copy of the warm-started AV (= AV_φ_init). KL is taken toward it,
-    matching the paper. If None, falls back to the base model via disable_adapter()
-    (NOT faithful — that references pre-warm-start weights)."""
+    ref_av: FROZEN copy of the warm-started AV (= AV_φ_init); KL is taken toward it via the
+    exact token-level KL in av.sequence_logprob. If None, no KL penalty is applied (kl=0)."""
     opt_av = torch.optim.AdamW([p for p in av.model.parameters() if p.requires_grad], lr=lr_av)
     opt_ar = torch.optim.AdamW(ar.trainable_parameters(), lr=lr_ar)
     Ht = torch.tensor(np.asarray(H), dtype=torch.float32, device=ar.device)

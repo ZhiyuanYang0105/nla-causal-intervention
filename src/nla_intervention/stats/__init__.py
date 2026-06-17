@@ -178,7 +178,13 @@ def compute_surface_shift(df: pd.DataFrame,
     # first PC via SVD
     U, S, Vt = np.linalg.svd(Xz.values - Xz.values.mean(0), full_matrices=False)
     pc1 = (Xz.values @ Vt[0])
-    if np.corrcoef(pc1, Xz.mean(axis=1))[0, 1] < 0:  # align sign: higher = more shift
+    # align sign so higher = more surface shift (guard against degenerate/constant inputs
+    # where corrcoef is NaN — fall back to aligning with the mean of the shift features)
+    ref = Xz.mean(axis=1).values
+    if pc1.std() > 0 and ref.std() > 0:
+        if np.corrcoef(pc1, ref)[0, 1] < 0:
+            pc1 = -pc1
+    elif float(np.dot(pc1, ref)) < 0:
         pc1 = -pc1
     return pd.Series(pc1, index=df.index, name="surface_shift")
 

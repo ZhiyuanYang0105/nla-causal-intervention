@@ -96,14 +96,26 @@ def analyze(df: pd.DataFrame) -> dict:
     dff = df[mc["pass_mask"]].copy()                       # primary analysis = filtered rows
     rep["n_after_filter"] = int(len(dff))
 
-    # 2) set-level FVE per condition (headline) + paired cosine test (robust)
+    # complete-case set: inputs that survived filtering in ALL conditions. The paired tests
+    # use exactly this (dropna how=any), so the headline FVE is computed on the SAME sample
+    # (aligned denominators) — otherwise per-condition survivors differ and aren't comparable.
+    piv = dff.pivot_table(index="input_id", columns="condition", values="cosine")
+    cc_ids = set(piv.dropna(how="any").index)
+    cc = dff[dff.input_id.isin(cc_ids)]
+    rep["n_complete_case"] = len(cc_ids)
+
+    # 2) set-level FVE per condition on the complete-case set + robust cosine summaries
     setfve = {}
     for c in rep["conditions"]:
-        sub = dff[dff.condition == c]
+        sub = cc[cc.condition == c]
         setfve[c] = round(float(1 - sub.sq_err.sum() / sub.sq_base.sum()), 3) if len(sub) else None
     rep["set_level_fve"] = setfve
-    rep["cosine_median"] = {c: round(float(dff[dff.condition == c].cosine.median()), 3)
-                            for c in rep["conditions"]}
+    rep["cosine_median"] = {c: round(float(cc[cc.condition == c].cosine.median()), 3)
+                            for c in rep["conditions"] if len(cc[cc.condition == c])}
+
+    if cc.condition.nunique() < 3 or rep["n_complete_case"] < 5:
+        rep["verdict"] = "UNDETERMINED: 过滤后完整配对样本/条件不足(Friedman 需 ≥3 条件)"
+        return rep
 
     omni = S.omnibus(dff, value="cosine", method="friedman")
     rep["friedman_cosine"] = {"p": round(float(omni["p_value"]), 4), "n": omni["n"]}
@@ -112,41 +124,55 @@ def analyze(df: pd.DataFrame) -> dict:
                                   "p_corrected", "significant"]].to_dict(orient="records")
 
     # 3) mechanism regression (the H1-vs-H2 discriminator): does surface_shift explain the
-    #    cosine drop AFTER controlling for sim? Run on the kept semantic-preserving subset.
+    #    cosine drop AFTER controlling for sim? Surface the convergence/boundary state so a
+    #    fragile (random-effect-collapsed) p-value is not trusted silently.
     rep["mechanism"] = {}
     try:
-        res = S.mechanism_regression(dff, value="cosine", keep_conditions=KEEP, baseline="C0")
+        import warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            res = S.mechanism_regression(dff, value="cosine", keep_conditions=KEEP, baseline="C0")
+        boundary = any("boundary" in str(x.message).lower() or "converg" in str(x.message).lower()
+                       for x in w)
         rep["mechanism"] = {"surface_shift_coef": float(res.params.get("surface_shift", np.nan)),
                             "surface_shift_p": float(res.pvalues.get("surface_shift", np.nan)),
-                            "sim_zz_prime_p": float(res.pvalues.get("sim_zz_prime", np.nan))}
+                            "sim_zz_prime_p": float(res.pvalues.get("sim_zz_prime", np.nan)),
+                            "boundary_or_nonconverged": bool(boundary)}
     except Exception as e:
         rep["mechanism"] = {"error": str(e)}
 
-    # 4) verdict (gated)
+    # 4) verdict (gated). H2 requires surface_shift to be SIGNIFICANT *and POSITIVE* (more
+    #    surface change -> larger reconstruction drop), from a converged model.
     sp = tbl.set_index("condition")
     para_sig = sum(bool(sp.loc[c, "significant"]) for c in KEEP if c in sp.index)
     drift_sig = bool(sp.loc["C4", "significant"]) if "C4" in sp.index else False
-    surf_p = rep["mechanism"].get("surface_shift_p", np.nan)
-    surf_sig = isinstance(surf_p, float) and surf_p == surf_p and surf_p < 0.05  # not-NaN and <0.05
+    m = rep["mechanism"]
+    surf_p, surf_coef = m.get("surface_shift_p", np.nan), m.get("surface_shift_coef", np.nan)
+    surf_ok = (isinstance(surf_p, float) and surf_p == surf_p and surf_p < 0.05
+               and isinstance(surf_coef, float) and surf_coef > 0
+               and not m.get("boundary_or_nonconverged", False))
 
     if not drift_ok:
         verdict = "INVALID-CONTROL: 负对照(漂移)未生效(C4 sim 未达标),无法判别 H1/H2"
     elif omni["p_value"] >= 0.05:
         verdict = "UNDETERMINED: omnibus 不显著(功效/信号不足)"
-    elif surf_sig and para_sig >= 1:
-        verdict = "H2(表面/隐写): 控制 sim 后 surface_shift 显著解释重建下降"
-    elif drift_sig and para_sig == 0 and not surf_sig:
+    elif surf_ok and para_sig >= 1:
+        verdict = "H2(表面/隐写): 控制 sim 后 surface_shift 显著且为正,解释重建下降"
+    elif drift_sig and para_sig == 0 and not surf_ok:
         verdict = "H1(语义): 仅漂移降重建、改写不降、surface_shift 不显著"
     else:
-        verdict = "UNDETERMINED: 效应不一致 / 机制回归不显著"
+        verdict = "UNDETERMINED: 效应不一致 / 机制回归不显著或不收敛"
     rep["verdict"] = verdict
     return rep
 
 
 def _print(rep: dict) -> None:
-    print(f"\nn_rows={rep['n_rows']} → 过滤后 n={rep['n_after_filter']}")
+    print(f"\nn_rows={rep['n_rows']} → 过滤后 n={rep['n_after_filter']} (完整配对 {rep.get('n_complete_case','?')})")
     print("manipulation 通过率:", rep["manipulation_pass_rate"], "| 负对照有效:", rep["drift_control_ok"])
     print("set-level FVE/条件:", rep["set_level_fve"])
+    if "friedman_cosine" not in rep:                       # early-return (too few complete pairs)
+        print(f"\n=== 判定 ===\n{rep['verdict']}")
+        return
     print(f"Friedman(cosine) p={rep['friedman_cosine']['p']} (n={rep['friedman_cosine']['n']})")
     print("pairwise vs C0 (cosine, Holm):")
     for x in rep["pairwise_cosine"]:

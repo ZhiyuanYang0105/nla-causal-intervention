@@ -1,13 +1,13 @@
 """Activation Verbalizer (AV) — faithful to NLA (transformer-circuits 2026).
 
 AV takes an ACTIVATION h_l (a vector) and produces a natural-language explanation z.
-Mechanism (paper): scale h_l by a constant and insert it IN PLACE OF a placeholder
-token's embedding, then autoregressively sample z at temperature T.
+Mechanism (paper): normalize h_l to unit L2, scale by a constant, insert it IN PLACE OF a
+placeholder token's embedding, then autoregressively sample z at temperature T.
 
 LoRA-trainable. Exposes:
-  - generate(h_l, n)          : sample n explanations (for GRPO group sampling / inference)
-  - sequence_logprob(h_l, z)  : sum log p(z | h_l) under AV (for the GRPO policy gradient)
-  - kl_to_ref(...)            : token-level KL to the frozen init model (fluency penalty)
+  - generate(h_l, n)                    : sample n explanations (GRPO group sampling / inference)
+  - sequence_logprob(h_l, z, ref_model) : returns (sum log p(z|h_l), token-level KL to ref);
+                                          the KL is the fluency penalty when ref_model is given
 
 Only Opus-4.6 -> Qwen2.5-0.5B differs from the paper; the rest mirrors the method.
 """
