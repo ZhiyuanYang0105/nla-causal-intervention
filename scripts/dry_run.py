@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# ⚠️ PHASE 1 (text-proxy) plumbing demo with fake AV/AR. Not the faithful NLA
+#    (scripts/train_nla.py + steg_intervention.py). See docs/nla_faithful_findings.md.
 """End-to-end DRY RUN with fake AV/AR/rewriter/embedder — proves the FULL pipeline
 (AV -> intervene -> AR -> metrics -> stats) before real models exist.
 

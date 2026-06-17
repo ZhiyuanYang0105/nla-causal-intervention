@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# ⚠️ PHASE 1 (text-proxy; conclusion RETRACTED — AV/AR not co-trained). Faithful NLA:
+#    see docs/nla_faithful_findings.md.
 """Channel-localization: run THREE ARs of differing surface-sensitivity on the SAME
 cached (activation, z, z') data and compare the ΔFVE spectrum per condition.
 

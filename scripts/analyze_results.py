@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# ⚠️ PHASE 1 (text-proxy; conclusion RETRACTED). Stats over the phase-1 ridge pipeline.
+#    Faithful NLA: see docs/nla_faithful_findings.md.
 """Statistical analysis over a finished run's metrics table.
 
 Loads results/<run_id>/metrics.{parquet,csv}, runs the paired analysis

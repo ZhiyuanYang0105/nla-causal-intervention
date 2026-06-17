@@ -1,11 +1,8 @@
-# Default experiment config. Override per-experiment (see experiments/exp01_pilot/config.yaml).
+# Default experiment config (shared base). Experiments `extends:` this and override.
+# NOTE: model definitions live INLINE in each experiments/<id>/config.yaml (not here);
+# conditions are loaded directly from configs/conditions.yaml by the scripts.
 
-defaults:
-  models: configs/models.yaml
-  conditions: configs/conditions.yaml
-
-# LOCAL-BUDGET: activations h_l from frozen M (Llama-3.2-1B) over FineWeb.
-# Cache ONLY selected-layer pooled vectors in fp16 (see local_budget_plan §4).
+# Activation harvesting (phase-2 faithful runs override target_model inline).
 data:
   corpus: HuggingFaceFW/fineweb
   subset: sample-10BT     # stream + sub-sample

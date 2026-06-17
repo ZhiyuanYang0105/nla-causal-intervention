@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+# ⚠️ PHASE 1 (text-proxy). Its AV/AR are NOT co-trained -> cannot test steganography;
+#    the exp02 "H1" conclusion is RETRACTED. Faithful NLA is scripts/train_nla.py +
+#    steg_intervention.py. See docs/nla_faithful_findings.md.
 """Staged LOCAL pilot orchestrator (MacBook M5 / 16GB). See docs/local_budget_plan.md.
 
 Six stages, each checkpointed to disk so the run resumes; only ONE LLM is resident at a

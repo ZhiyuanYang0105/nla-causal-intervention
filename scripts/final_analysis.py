@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# ⚠️ PHASE 1 (text-proxy; conclusion RETRACTED — AV/AR not co-trained). Analyzes the
+#    phase-1 ridge pipeline. Faithful NLA: see docs/nla_faithful_findings.md.
 """Robust final analysis: k-fold CV reconstruction + paired stats on the cached run.
 
 Single train/eval splits gave wildly split-dependent FVE (-0.18..+0.11, eval=92 too
