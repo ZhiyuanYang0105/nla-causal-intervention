@@ -146,9 +146,9 @@ covariates: domain, len(z), sim(z,z'), token_shift  ──┘
 ```
 1. 采集激活集 H：跑 M 在 pretraining-like 文本上，取层 l、最后 token 的 h_l   [data/harvest]
                   （多 domain 分层；held-out split 与 AV/AR 训练数据不重叠）
-2. AV(h_l) → z                       [pipeline: ActivationVerbalizer]
+2. AV(h_l) → z                       [nla.av: ActivationVerbalizer]
 3. 对每个 z 应用 T_k → z'_k           [conditions/*]   ← manipulation check: sim(z,z')
-4. AR(z'_k) → ĥ_l,k                   [pipeline: ActivationReconstructor]
+4. AR(z'_k) → ĥ_l,k                   [nla.ar: ActivationReconstructor]
 5. 计算 metrics: FVE(h_l, ĥ_l,k) + sim/length/token-shift   [metrics/*]
 6. 配对统计分析                        [stats/*]
 7. 出图 + 报告                         [results/, notebooks/]
@@ -173,11 +173,11 @@ covariates: domain, len(z), sim(z,z'), token_shift  ──┘
 
 ## 9. 交付物
 
-- `docs/`：本计划 + 设计 + 指标 + 统计方案（已建）。
-- `src/nla_intervention/`：conditions / pipeline / metrics / stats 模块（先 stub，后实现）。
-- `experiments/exp01_pilot/`：小样本 pilot 配置与 run。
-- `results/`：metrics 表、统计结果、图。
-- 报告：结论回答 RQ1–RQ3，判定 H1/H2/H3。
+- `docs/`：本计划 + 设计 + 指标 + 统计方案 + 忠实复现 findings。
+- `src/nla_intervention/`：nla（忠实 AV/AR + 训练）/ conditions / metrics / stats / data 模块。
+- `experiments/exp04_nla/`：忠实 NLA 主实验配置。
+- `results/`：metrics 表、统计结果、checkpoint。
+- 报告：结论回答 RQ1–RQ3，判定 H1/H2/H3（见 nla_faithful_findings.md）。
 
 ---
 
@@ -186,7 +186,7 @@ covariates: domain, len(z), sim(z,z'), token_shift  ──┘
 | 阶段 | 内容 | 产物 |
 |------|------|------|
 | M0 | 框架搭建（本次） | 目录 + 计划 + scaffold |
-| M1 | 接入 AV/AR + 数据 | pipeline 可跑通 1 条 |
+| M1 | 接入 AV/AR + 数据 | nla 流程跑通 1 条 |
 | M2 | 实现 5 个核心条件 + manipulation check | conditions 可用 |
 | M3 | 指标 + pilot（小样本） | pilot metrics 表 |
 | M4 | 全量 run + 统计分析 | 显著性结果 |

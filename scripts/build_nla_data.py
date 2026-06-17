@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""Build a larger (h_l, summary) dataset for NLA warm-start by REUSING an existing run's
-pairs and topping up via fresh harvest + summary generation.
+"""Build the (h_l, summary) dataset for NLA warm-start: harvest activations from M over
+FineWeb + generate summaries (batched). Optionally top up an existing set with --reuse.
 
-    python scripts/build_nla_data.py --reuse exp02_open --out exp03_nla --n 700
+    python scripts/build_nla_data.py --out exp04_nla --n 2500
 
 Writes data/interim/<out>/{acts.npz, summaries.json}. Float32 mean-pool activations.
 """
@@ -46,25 +46,26 @@ def _summarizer(model_name="Qwen/Qwen2.5-0.5B-Instruct"):
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--reuse", default="exp02_open")
-    ap.add_argument("--out", default="exp03_nla")
-    ap.add_argument("--n", type=int, default=700)
+    ap.add_argument("--out", default="exp04_nla")
+    ap.add_argument("--n", type=int, default=2500)
+    ap.add_argument("--reuse", default=None,
+                    help="optional: top up an existing data/interim/<reuse> instead of "
+                         "harvesting all fresh")
     args = ap.parse_args()
 
-    reuse = ROOT / "data/interim" / args.reuse
-    acts = np.load(reuse / "acts.npz", allow_pickle=True)
-    H = list(np.asarray(acts["h_l"], dtype=np.float32))
-    ids = [str(x) for x in acts["input_id"]]
-    src = [str(s) for s in acts["source_text"]]
-    dom = [str(d) for d in acts["domain"]]
-    if (reuse / "summaries.json").exists():                   # combined format
+    H, ids, src, dom, summaries = [], [], [], [], []
+    if args.reuse:                                            # optional: top up an existing set
+        reuse = ROOT / "data/interim" / args.reuse
+        acts = np.load(reuse / "acts.npz", allow_pickle=True)
+        H = list(np.asarray(acts["h_l"], dtype=np.float32))
+        ids = [str(x) for x in acts["input_id"]]
+        src = [str(s) for s in acts["source_text"]]
+        dom = [str(d) for d in acts["domain"]]
         summaries = json.loads((reuse / "summaries.json").read_text())
-    else:                                                     # legacy z_zprime.jsonl
-        zrows = {r["input_id"]: r for r in
-                 (json.loads(l) for l in (reuse / "z_zprime.jsonl").read_text().splitlines() if l.strip())}
-        summaries = [zrows[i]["z"] for i in ids]
+        print(f"reuse {len(ids)} pairs from {args.reuse}; need {args.n - len(ids)} more")
+    else:
+        print(f"harvesting all {args.n} pairs fresh")
     have = set(ids)
-    print(f"reuse {len(ids)} pairs from {args.reuse}; need {args.n - len(ids)} more")
 
     # harvest fresh activations (skip ids we already have)
     hc = HarvestConfig(target_model="Qwen/Qwen2.5-0.5B", layer_l=12, n_samples=args.n * 3,

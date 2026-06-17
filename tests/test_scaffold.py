@@ -30,8 +30,8 @@ def test_reconstruction_metric_is_activation_space():
 
 
 def test_config_extends_merge():
-    cfg = load_config(ROOT / "experiments/exp01_pilot/config.yaml")
-    assert cfg["data"]["n_samples"] == 200                # overridden in pilot (local budget)
-    assert cfg["data"]["max_snippet_tokens"] == 128       # seq len cap
+    cfg = load_config(ROOT / "experiments/exp04_nla/config.yaml")
+    assert cfg["experiment"]["id"] == "exp04_nla"          # overridden in experiment
+    assert cfg["target_model"]["hidden_size"] == 896       # experiment-specific
     assert cfg["stats"]["omnibus"] == "friedman"          # inherited from default
-    assert cfg["metrics"]["reconstruction"]["primary"] == "fve"  # activation-space
+    assert cfg["metrics"]["reconstruction"]["primary"] == "fve"  # inherited (activation-space)

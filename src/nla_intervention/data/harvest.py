@@ -17,9 +17,9 @@ import numpy as np
 
 @dataclass
 class HarvestConfig:
-    # LOCAL-BUDGET defaults (Llama-3.2-1B, fp16, MPS); see docs/local_budget_plan.md
-    target_model: str = "meta-llama/Llama-3.2-1B"
-    layer_l: int = 8
+    # defaults match the faithful local setup (ungated Qwen2.5-0.5B on MPS)
+    target_model: str = "Qwen/Qwen2.5-0.5B"
+    layer_l: int = 12
     corpus: str = "HuggingFaceFW/fineweb"
     subset: str = "sample-10BT"
     streaming: bool = True

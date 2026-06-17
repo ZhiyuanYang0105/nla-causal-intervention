@@ -139,7 +139,7 @@ Friedman **p=0.67**——无任何显著效应,效应量 dz≤0.07。操纵有�
 
 ```bash
 pip install -e ".[models,nlp]" && pip install peft
-python scripts/build_nla_data.py --reuse exp02_open --out exp03_nla --n 700   # 数据
+python scripts/build_nla_data.py --out exp04_nla --n 2500   # 采集激活 + 摘要
 python scripts/train_nla.py --config experiments/exp03_nla/config.yaml --ws-epochs 8          # warm-start
 python scripts/train_nla.py --config experiments/exp03_nla/config.yaml --grpo --grpo-steps 100  # +GRPO
 ```

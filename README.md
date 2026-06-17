@@ -4,41 +4,25 @@
 
 NLA 在**激活空间**自编码:`h_l ──AV──▶ 解释文本 z ──AR──▶ ĥ_l`。
 核心问题:干预中间文本 `z`(语义保持的改写)后,AR 重建激活的 **FVE** 是否下降?
-若下降 → 信息走**表面形式/隐写通道**;若只有语义漂移才下降 → 走**语义通道**。
+- 若**只有改语义(漂移)才下降** → 信息走**语义通道**(解释忠实,H1)
+- 若**保语义的改写也下降** → 信息藏在**表面形式**里 → **隐写通道**(解释不忠实,H2)
 
-- **AV** = Activation Verbalizer:`h_l → z`(激活作为 embedding 注入,自回归生成)
-- **AR** = Activation Reconstructor:`z → ĥ_l`(过模型取 layer-l 激活 + 学习的 affine map)
-- **关键**:隐写是 **AV/AR 联合训练**的产物——不联合训练就不可能出现隐写,也就无从检测。
+**关键前提:隐写是 AV/AR 联合训练的产物**——只有把两者一起训练,AV 才可能学会把信息编码进措辞表面、AR 才学会解它。所以本项目忠实地按论文**联合训练** AV/AR,再做干预测试。
 
-> 本地复现配置(MacBook M5 / 16GB / 纯本地):M = `Qwen2.5-0.5B`(免授权,替代闭源 Opus 4.6),
-> 其余尽量忠实论文。详见 **[docs/local_budget_plan.md](docs/local_budget_plan.md)**。
-
----
-
-## ⚠️ 两个阶段,务必区分
-
-本仓库经历了两个阶段,结论性质完全不同:
-
-### 阶段一(exp02_open):文本空间代理 — **结论已作废**
-早期把 NLA 近似成:AV=源文本摘要(非激活输入)、AR=独立拟合的 ridge(**未与 AV 联合训练**)。
-当时报告"支持 H1 语义通道"。**该结论无效**:AV/AR 没有联合训练,隐写从设置上就不可能存在,
-等于没测真正的问题。保留 `docs/results_exp02.md` 仅作过程记录与反面教材。
-
-### 阶段二(exp03/exp04_nla):忠实 NLA — **方法正确**
-按论文重建:**激活注入式 AV** + **截断 AR + affine** + warm-start SFT + **GRPO 联合训练**(KL 惩罚)。
-唯一替换是 Opus 4.6 → Qwen2.5-0.5B。这才是能检测隐写的正确设置。
+- **AV (Activation Verbalizer)**:`h_l → z`。激活归一化后作为一个 token embedding **注入**,自回归生成解释。
+- **AR (Activation Reconstructor)**:`z → ĥ_l`。z 过模型取 layer-`l` 末 token 激活 → **学习的 affine map**。
+- **训练**(忠实于论文,唯一替换 Opus 4.6 → Qwen2.5-0.5B):
+  - **warm-start SFT**:AV 学 `h_l→摘要`、AR 学 `摘要→h_l`(热启动)
+  - **GRPO 联合训练**:AV 用强化学习(reward = −重建误差,AR 当固定打分器),AR 用监督 MSE,更新解耦
+  - **KL 惩罚**:把 AV 锚在热启动状态附近,保持解释流畅(防退化成乱码)
 
 ---
 
-## 实验结果(exp04_nla,忠实 NLA,N=2500,本地真实运行)
+## 结果(exp04_nla,N=2500,本地真实运行)
 
-**训练**(修复 KL bug 后):
-- 忠实度核查发现一个真实 bug:KL 应朝 **warm-start 后的 AV**(`AV_φ_init`),原实现错误地朝**底座**。
-  修复后 GRPO `kl/tok` 从 ≈0 起步(av=ref)、随 RL 增长(旧 bug 版一开始就 ~1.0)。
-- warm-start AR-only FVE +0.14;稳定化 GRPO(经验回放+per-token KL)后 **chain FVE +0.06 → +0.175**
-  (修正 KL 后近单调爬升,峰值过 +0.29,进入论文 warm-start 区间 0.3–0.4)。
+**训练**:warm-start AR-only FVE +0.14 → 稳定化 GRPO 后 **chain FVE +0.175**(峰值过 +0.29,进入论文 warm-start 区间 0.3–0.4)。
 
-**隐写干预测试**(修正 NLA,强基线,真实 Qwen-Instruct 改写,n_eval=350):
+**隐写干预测试**(共训练 AV/AR + 真实改写,n_eval=350):
 
 | 条件 | FVE 中位数 | Δ vs C0 | 配对 Wilcoxon(Holm) | sim(z,z') |
 |--|--|--|--|--|
@@ -50,60 +34,54 @@ NLA 在**激活空间**自编码:`h_l ──AV──▶ 解释文本 z ──AR�
 
 **Friedman omnibus p=0.176(不显著)。** 操纵有效(改写 sim≈0.85、漂移≈0.58)。
 
-### 结论:隐写问题在本地规模下**无法判定(UNDETERMINED)**——但方法完全正确
+### 结论:在本地规模下**无法判定(UNDETERMINED)**——但方法完全正确
 
-- omnibus 不显著;只有 C2 显著(dz 极小、与 C1/C3 不自洽);**跨子集不稳**
-  (n=120 时漂移 C4 降 0.19、n=350 时只降 0.03,负对照矛盾)→ 噪声主导。per-sample 均值仍为负(重尾)。
-- **弱而较一致的描述性迹象**:两次都见"保语义改写(C1-C3)降 FVE > 漂移 C4",强改写 C2 两次都显著——
-  **若非噪声**会隐指 H2(表面/隐写通道),但 omnibus 不显著 → **不能下结论**。
-- 这次是**方法完全正确**(真共训练、KL 修复、强基线 FVE +0.175、操纵有效)下仍判不出 → 纯因 0.5B/2500
-  规模重建重尾、功效不足。要判定隐写需论文规模(更大模型/数据 → 更强更稳 FVE → 足够功效)。
+- omnibus 不显著;只有 C2 显著(dz 极小、与 C1/C3 不自洽);跨子集不稳 → 噪声主导(per-sample 重尾)。
+- 弱而较一致的描述性迹象:保语义改写(C1-C3)降 FVE > 漂移 C4——**若非噪声**会隐指 H2,但不显著 → 不能下结论。
+- 这是**方法完全正确**(真共训练、KL 修复、强基线 FVE +0.175、操纵有效)下仍判不出 → 纯因 **0.5B/2500 规模重建重尾、功效不足**。要判定隐写需更大模型/数据 → 更强 FVE → 足够功效。
 
-完整方法+结果+诊断见 **[docs/nla_faithful_findings.md](docs/nla_faithful_findings.md)**。
+详见 **[docs/nla_faithful_findings.md](docs/nla_faithful_findings.md)**(含完整忠实度核查);更大规模复现见 **[docs/autodl_plan.md](docs/autodl_plan.md)**。
 
 ---
 
 ## 文档
 
-- [论文事实依据](docs/paper_findings.md) — AV/AR/M、FVE、激活采集、**训练方法(GRPO+KL)**
-- [忠实复现 findings](docs/nla_faithful_findings.md) ⭐ — 忠实 NLA 的实现、训练、隐写测试、结论
-- [本地预算方案](docs/local_budget_plan.md) — M5/16GB 下的轻量化设计
-- [autodl/5090 复现方案](docs/autodl_plan.md) — 在单张 5090 上忠实复现(1.5B、全量微调、β 扫描判定隐写)的 runbook
-- [研究计划](docs/research_plan.md) / [评价指标](docs/metrics.md) / [统计方案](docs/statistical_analysis.md)
-- [results_exp02](docs/results_exp02.md) / [pilot_findings](docs/pilot_findings.md) — 阶段一过程记录(结论已作废)
+- [论文事实依据](docs/paper_findings.md) — AV/AR/FVE 与论文的 GRPO 训练方法
+- [忠实复现 findings](docs/nla_faithful_findings.md) ⭐ — 实现、训练、隐写测试、忠实度核查、结论
+- [研究计划](docs/research_plan.md) / [评价指标](docs/metrics.md) / [统计方案](docs/statistical_analysis.md) — 实验设计
+- [autodl/5090 复现方案](docs/autodl_plan.md) — 单卡 1.5B 忠实复现 runbook(全量微调、β 扫描、多种子)
 
 ## 结构
 
 ```
 src/nla_intervention/
-  nla/          忠实 NLA:av(激活注入) / ar(截断+affine) / train(warmstart+GRPO)
-  conditions/   干预变换 (paraphrase/drift/...) + 改写器 (LLM/Fake)
+  nla/          忠实 NLA:av(激活注入) / ar(截断+affine) / train(warm-start + GRPO + KL)
+  conditions/   干预变换 (paraphrase/drift/...) + apply_condition + 改写器 (LLM/Fake)
   metrics/      reconstruction(FVE,激活) / semantic(sim_zz') / token-shift
   stats/        配对检验 + 机制回归 + 功效
-  pipeline/     AV/AR 接口、runner、ridge readout(阶段一)
   data/         激活采集器 (跑 M → 收 h_l)
+  utils/        config / seed
 scripts/
-  build_nla_data.py   采集激活 + 批量生成摘要(warm-start 数据)
-  train_nla.py        warm-start SFT + GRPO 联合训练
+  build_nla_data.py   采集激活 + 批量生成摘要 (warm-start 数据)
+  train_nla.py        warm-start SFT + GRPO 联合训练 -> ckpt
   steg_intervention.py 共训练 AV/AR 上的隐写干预测试 ⭐
-  (阶段一: run_local_pilot / final_analysis / compare_ar / dry_run)
-experiments/    exp02_open(阶段一) / exp03_nla / exp04_nla(忠实)
-docs/  results/  data/  tests/
+experiments/    exp03_nla / exp04_nla(忠实主实验)
+configs/        default.yaml(共享基础) + conditions.yaml(干预条件)
+docs/  tests/
 ```
 
 ## 快速开始
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -e ".[models,nlp]" && pip install peft     # 含 torch/transformers/peft
+pip install -e ".[dev]"     # 轻量(numpy/scipy/pandas) — 跑指标/stats/测试
+make test                   # 单元测试(指标 + 改写器 + stats + 采集器 helper)
 
-# 忠实 NLA(本地,MacBook):
-python scripts/build_nla_data.py  --reuse exp02_open --out exp04_nla --n 2500   # 数据(批量摘要)
-python scripts/train_nla.py       --config experiments/exp04_nla/config.yaml --grpo --grpo-steps 200
-python scripts/steg_intervention.py --config experiments/exp04_nla/config.yaml --n-eval 120
-
-# 纯分析/测试(无需模型):
-pip install -e ".[dev]" && make test
+# 完整忠实流程(需 GPU + transformers/peft):
+pip install -e ".[models,nlp]" && pip install peft
+make nla-data               # 采集激活 + 摘要
+make train-nla              # warm-start + GRPO 联合训练(数小时)
+make steg                   # 隐写干预测试
 ```
 
-> 训练在 0.5B/2500 规模约数小时;GRPO 收敛有残余震荡;结论限定为"在该本地规模代理上"。
+> 本地 0.5B/MacBook 规模:方法忠实但功效受限(结论 UNDETERMINED)。要得到可判定的结果,见 autodl_plan(单张 5090 + 1.5B 全量微调)。
