@@ -20,7 +20,7 @@ def manipulation_check(
     df: pd.DataFrame,
     tau_keep: float = 0.85,
     tau_drift: float = 0.60,
-    keep_conditions=("C1", "C2", "C3", "C5", "C6"),
+    keep_conditions=("C1", "C2", "C3"),
     drift_conditions=("C4",),
     sim_col: str = "sim_zz_prime",
 ) -> dict[str, Any]:
@@ -212,7 +212,7 @@ def mixed_model(df: pd.DataFrame, formula: str = "fve ~ condition + len_ratio + 
 def mechanism_regression(
     df: pd.DataFrame,
     formula: str = "delta_fve ~ surface_shift + sim_zz_prime + len_ratio + (1|input_id)",
-    keep_conditions=("C1", "C2", "C3", "C5", "C6"),
+    keep_conditions=("C1", "C2", "C3"),
     baseline: str = "C0", value: str = "fve",
 ) -> Any:
     """Core semantic-vs-surface test on the semantic-preserving subset.

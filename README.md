@@ -20,27 +20,16 @@ NLA 在**激活空间**自编码:`h_l ──AV──▶ 解释文本 z ──AR�
 
 ## 结果(exp04_nla,N=2500,本地真实运行)
 
-**训练**:warm-start AR-only FVE +0.14 → 稳定化 GRPO 后 **chain FVE +0.175**(峰值过 +0.29,进入论文 warm-start 区间 0.3–0.4)。
+**训练(本地 Qwen2.5-0.5B)**:warm-start AR-only FVE +0.14 → 修 KL bug + 精确逐 token KL 后,
+GRPO 把 **chain FVE 从 +0.06 提升到 +0.175**(峰值过 +0.29);AR 已截断到前 l 层(消除死 LoRA、=论文做法)。
 
-**隐写干预测试**(共训练 AV/AR + 真实改写,n_eval=350):
+**隐写干预:本地 0.5B 规模下结论为 UNDETERMINED,且无法支撑任何方向性判定。** 原因(经独立审计确认):
+- **负对照不可靠**:语义漂移 C4 平均 sim≈0.58、约半数没真漂移——0.5B 改写器太弱,漂移≈"第四种改写"。
+- **NLA 太弱**:set-level chain FVE 仅 ~+0.06,重建信号接近噪声底;约 40% "保语义"样本也没过 sim 门控。
 
-| 条件 | FVE 中位数 | Δ vs C0 | 配对 Wilcoxon(Holm) | sim(z,z') |
-|--|--|--|--|--|
-| C0 原始 | +0.345 | — | — | 1.00 |
-| C1 轻改写 | +0.274 | 0.071 | 不显著 dz=0.04 | 0.85 |
-| C2 强改写 | +0.222 | 0.122 | 显著 dz=0.07 | 0.85 |
-| C3 保格式改写 | +0.243 | 0.102 | 不显著 dz=0.08 | 0.88 |
-| C4 语义漂移 | +0.315 | 0.030 | 不显著 dz=0.01 | 0.58 |
+干预分析本身已按审计修正为**正确管线**(操纵门控过滤 + set-level FVE + 稳健 cosine 配对检验 + `mechanism_regression` 作 H1/H2 判别器 + 门控判定),但**要得到可信的 H1/H2 判定,需要更大模型/数据**(更强且稳定的 FVE + 真能漂移的负对照)。
 
-**Friedman omnibus p=0.176(不显著)。** 操纵有效(改写 sim≈0.85、漂移≈0.58)。
-
-### 结论:在本地规模下**无法判定(UNDETERMINED)**——但方法完全正确
-
-- omnibus 不显著;只有 C2 显著(dz 极小、与 C1/C3 不自洽);跨子集不稳 → 噪声主导(per-sample 重尾)。
-- 弱而较一致的描述性迹象:保语义改写(C1-C3)降 FVE > 漂移 C4——**若非噪声**会隐指 H2,但不显著 → 不能下结论。
-- 这是**方法完全正确**(真共训练、KL 修复、强基线 FVE +0.175、操纵有效)下仍判不出 → 纯因 **0.5B/2500 规模重建重尾、功效不足**。要判定隐写需更大模型/数据 → 更强 FVE → 足够功效。
-
-详见 **[docs/nla_faithful_findings.md](docs/nla_faithful_findings.md)**(含完整忠实度核查);更大规模复现见 **[docs/autodl_plan.md](docs/autodl_plan.md)**。
+详见 **[docs/nla_faithful_findings.md](docs/nla_faithful_findings.md)**(含完整忠实度核查与两轮独立审计的修复);更大规模复现见 **[docs/autodl_plan.md](docs/autodl_plan.md)**。
 
 ---
 
