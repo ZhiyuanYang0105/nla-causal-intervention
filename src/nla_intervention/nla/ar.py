@@ -28,6 +28,12 @@ class ActivationReconstructor(nn.Module):
         if self.tok.pad_token is None:
             self.tok.pad_token = self.tok.eos_token
         model = AutoModelForCausalLM.from_pretrained(model_name, dtype=dtype).to(device)
+        # Truncate to the first l transformer blocks (paper: "truncated to its first l
+        # layers"). The AR's output is hidden_states[l], and blocks > l cannot affect it
+        # (causal forward) — so this both saves compute AND ensures LoRA lands only on
+        # layers that actually influence the output (otherwise upper-layer LoRA is dead).
+        model.model.layers = model.model.layers[:layer_l]
+        model.config.num_hidden_layers = layer_l
         if adapter_path:                                   # load trained LoRA
             from peft import PeftModel
             model = PeftModel.from_pretrained(model, adapter_path).to(device)

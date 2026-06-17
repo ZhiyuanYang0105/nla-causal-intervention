@@ -123,14 +123,11 @@ def grpo_train(av, ar, H, *, ref_av=None, steps=200, group=8, batch=4, beta=0.02
         for zs, h, r in zip(all_z, all_h, all_reward):
             adv = (r - r.mean()) / (r.std() + 1e-6)
             for z, a in zip(zs, adv):
-                lp = av.sequence_logprob(h, z)[0]
-                if ref_av is not None:                          # KL toward warm-started AV_init
-                    lp_ref = ref_av.sequence_logprob(h, z)[0].detach()
-                else:                                           # fallback: base model (not faithful)
-                    with av.model.disable_adapter():
-                        lp_ref = av.sequence_logprob(h, z)[0].detach()
-                ntok = max(1, len(av.tok(z, add_special_tokens=False).input_ids))
-                kl = (lp - lp_ref) / ntok                      # per-token KL surrogate
+                if ref_av is not None:                          # exact token-level D_KL(AV‖AV_init)
+                    lp, kl = av.sequence_logprob(h, z, ref_model=ref_av)
+                else:
+                    lp = av.sequence_logprob(h, z)[0]
+                    kl = torch.zeros((), device=lp.device)
                 ((-(a.detach() * lp) + beta * kl) / (group * batch)).backward()
                 kl_acc += float(kl) / (group * batch)
         torch.nn.utils.clip_grad_norm_([p for p in av.model.parameters() if p.requires_grad], 1.0)
