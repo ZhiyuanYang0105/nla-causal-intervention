@@ -68,6 +68,7 @@ NLA 在**激活空间**自编码:`h_l ──AV──▶ 解释文本 z ──AR�
 - [论文事实依据](docs/paper_findings.md) — AV/AR/M、FVE、激活采集、**训练方法(GRPO+KL)**
 - [忠实复现 findings](docs/nla_faithful_findings.md) ⭐ — 忠实 NLA 的实现、训练、隐写测试、结论
 - [本地预算方案](docs/local_budget_plan.md) — M5/16GB 下的轻量化设计
+- [autodl/5090 复现方案](docs/autodl_plan.md) — 在单张 5090 上忠实复现(1.5B、全量微调、β 扫描判定隐写)的 runbook
 - [研究计划](docs/research_plan.md) / [评价指标](docs/metrics.md) / [统计方案](docs/statistical_analysis.md)
 - [results_exp02](docs/results_exp02.md) / [pilot_findings](docs/pilot_findings.md) — 阶段一过程记录(结论已作废)
 
