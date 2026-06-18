@@ -36,12 +36,17 @@
 
 ## 训练(exp04_nla,N=2500)
 
-- 数据 240→700→2500,warm-start AR-only FVE 升到 **+0.14**。
+- 数据 240→700→2500,warm-start AR-only FVE 升到 **+0.14**;一次较早运行里 GRPO 把 chain FVE
+  推到 ~+0.175(峰值 +0.29)作量级参考。
 - **KL bug 已修**:论文 KL 朝 `AV_φ_init`(warm-start **之后**的 AV);原实现用 `disable_adapter()`
   错取到了**底座**。修复=GRPO 前冻结一份 warm-start 后的 AV 作参考(验证:step0 `kl/tok≈0`,旧 bug 版~1.0),
-  并改用**精确逐 token KL**(原先精确 KL 函数是死代码)。修复后 **chain FVE 从 +0.06 升到 +0.175**(峰值过 +0.29)。
+  并改用**精确逐 token KL**(原先精确 KL 函数是死代码)。
 - **AR 截断已修**:AR 原本跑全模型读 `hidden_states[l]`,导致 >l 层的 LoRA 是死的;现截断到前 l 层
   (=论文 "truncated to its first l layers"),消除死 LoRA。
+- **激活单位归一化已修**:harvest 现把 h_l 单位 L2 归一(=论文),使 AV 输入 / AR 目标 / FVE 一致。
+
+> ⚠️ **上面的具体数字(+0.14 / +0.175 等)产生于这些修复之前的运行。** 修正后的管线(截断 AR + 归一化激活 +
+> 精确 KL + 门控分析)**尚未重跑**;本地旧的 `acts.npz` / `ckpt` 与现行代码**不兼容**,须重新 harvest + 重训。
 
 ## 隐写干预:分析已修正,本地结果作废
 
