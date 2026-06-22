@@ -16,7 +16,7 @@ bash scripts/hpc_setup.sh           # STEP 1 登录节点(有网,无 GPU):环境
 sbatch scripts/run_hpc.slurm        # STEP 2 GPU 作业:离线三阶段;配置 experiments/exp05_hpc/config.yaml
 ```
 
-**为什么分两步**:许多集群计算节点**断网**。`hpc_setup.sh` 在登录节点备好模型(`huggingface-cli download`)
+**为什么分两步**:许多集群计算节点**断网**。`hpc_setup.sh` 在登录节点备好模型(`hf download`)
 和本地语料(FineWeb 切片 → `data/raw/fineweb_slice.jsonl`);GPU 作业用 `--text-file` + `HF_HUB_OFFLINE=1`
 **全程离线**跑,既兼容断网计算节点,又不浪费付费 GPU 时间下载/装包。`run_hpc.slurm` 跑:
 ① `build_nla_data`(1.5B 采集 + **7B-Instruct** 摘要)→ ② `train_nla`(warm-start + GRPO)→
