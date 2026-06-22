@@ -204,11 +204,18 @@ def main() -> None:
     rw_model = cfg.get("paraphraser", {}).get("model", "Qwen/Qwen2.5-0.5B-Instruct")
     rewriter = _make_rewriter(rw_model)
     emb_model = cfg.get("embedding", {}).get("model", "all-MiniLM-L6-v2").split("/")[-1]
+    # The embedder drives sim_zz' -> the manipulation gate -> the whole H1/H2 verdict. If it can't
+    # load, fail LOUD: a null embedder silently drops every row to an "INVALID-CONTROL/UNDETERMINED"
+    # result that would only surface AFTER a paid run. Re-running steg after a fix is cheap (the
+    # train checkpoint is preserved), so crashing here is strictly better than a silent bad verdict.
+    from nla_intervention.metrics import SentenceTransformerEmbedder
     try:
-        from nla_intervention.metrics import SentenceTransformerEmbedder
         embedder = SentenceTransformerEmbedder(emb_model)
-    except Exception:
-        embedder = None
+    except Exception as e:
+        raise RuntimeError(
+            f"could not load sentence embedder '{emb_model}' (needed for sim_zz' gating). "
+            f"On HPC, ensure hpc_setup.sh pre-cached it (offline mode requires the cache). "
+            f"Original error: {e!r}") from e
 
     h_mean = H[ev].mean(0)
     rows = []

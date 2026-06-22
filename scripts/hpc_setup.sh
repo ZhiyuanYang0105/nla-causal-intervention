@@ -26,9 +26,13 @@ python -c "import torch" 2>/dev/null || pip install torch --index-url https://do
 pip install -e ".[models,nlp]"
 
 echo "== 2. pre-download models into $HF_HOME =="
+# `huggingface-cli download` is a dead stub in huggingface-hub>=1.x (which transformers 5.x
+# forces) — use `hf download`, falling back to the version-stable python API.
 for repo in "$M" "$SUMMARIZER" "$EMBEDDER"; do
   echo "  downloading $repo ..."
-  huggingface-cli download "$repo" >/dev/null
+  hf download "$repo" >/dev/null 2>&1 \
+    || huggingface-cli download "$repo" >/dev/null 2>&1 \
+    || python -c "from huggingface_hub import snapshot_download; snapshot_download('$repo')"
 done
 
 echo "== 3. pre-fetch FineWeb slice (offline corpus for the GPU job) =="
