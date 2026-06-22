@@ -47,16 +47,20 @@ pip install -e ".[models,nlp]"     # torch / transformers(>=4.56)/ datasets / pe
 make smoke      # Qwen2.5-0.5B, N=40, 全流程三阶段, ~10 分钟。exit 0 即代码路径无误。
 ```
 
-### 3. HPC(A100/H100,1.5B,推荐 80GB)
+### 3. HPC(A100/H100,1.5B,推荐 80GB)—— 两步
 ```bash
-sbatch scripts/run_hpc.slurm       # 从仓库根目录提交
+# STEP 1(登录节点,有网,无需 GPU):建环境 + 装依赖 + 预下模型 + 预取 FineWeb 切片
+bash scripts/hpc_setup.sh
+# STEP 2(改好 SBATCH 头与 conda 行后)提交 GPU 作业(此后可全程离线运行)
+sbatch scripts/run_hpc.slurm
 ```
-**提交前必须按你的集群改两处**(脚本里已注释标出):
-- 顶部 `#SBATCH`:`--partition`、GPU 约束(如 `--constraint=a100_80gb`);
-- env 块:`module load` / `conda` 环境名 / HF 缓存路径(墙内可设 `HF_ENDPOINT=https://hf-mirror.com`)。
+**为什么分两步**:许多集群的**计算节点是断网的**。`hpc_setup.sh` 在登录节点把模型和语料都备好,
+GPU 作业用本地语料(`--text-file`)+ `HF_HUB_OFFLINE` **离线跑**——既能在断网计算节点上跑,又**不浪费付费 GPU 时间**下载/装包。
 
-脚本顶部可调 knob:`N=20000`(数据量)、`GRPO_STEPS=1000`、`N_EVAL=500` 等。
-**省钱建议**:先把这些调小(如 `N=200/GRPO_STEPS=20`)`sbatch` 一次验证环境通,再改回大参数正式跑。
+**提交前按集群改**(脚本里已注释):`run_hpc.slurm` 顶部 `#SBATCH`(`--partition`、GPU 约束如 `--constraint=a100_80gb`)和 `conda activate` 那行;两个脚本的 `HF_HOME` 必须一致;墙内可在 `hpc_setup.sh` 设 `HF_ENDPOINT=https://hf-mirror.com`。
+
+脚本顶部 knob:`N=20000`、`GRPO_STEPS=1000`、`N_EVAL=500` 等。
+**省钱建议**:正式跑前先把这些调小(如 `N=200/GRPO_STEPS=20`)`sbatch` 一次,确认环境+流程通(几分钟、几块钱),再改回大参数。
 
 ### 流水线三阶段(`run_hpc.slurm` 依次执行,也可单独 `make` 跑)
 | 阶段 | 命令 | 做什么 | 产物 |
@@ -81,7 +85,8 @@ scripts/
   build_nla_data.py   ① 采集激活 + 摘要
   train_nla.py        ② warm-start + GRPO
   steg_intervention.py ③ 隐写干预测试(门控分析)
-  run_hpc.slurm       A100/H100 一键三阶段
+  hpc_setup.sh        登录节点一次性:环境+依赖+预下模型+预取语料(离线就绪)
+  run_hpc.slurm       A100/H100 GPU 作业:离线三阶段
 experiments/    exp03_nla / exp04_nla(0.5B 本地)/ exp05_hpc(1.5B HPC)/ smoke(验证)
 configs/        default.yaml(共享基础)+ conditions.yaml(干预条件)
 docs/           方法依据、忠实复现 findings、实验设计、HPC runbook

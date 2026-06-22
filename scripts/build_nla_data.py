@@ -55,6 +55,8 @@ def main() -> None:
     ap.add_argument("--layer", type=int, default=12)
     ap.add_argument("--pooling", default="mean")              # "last" (paper) | "mean"
     ap.add_argument("--summarizer", default="Qwen/Qwen2.5-0.5B-Instruct")  # use 7B-Instruct on HPC
+    ap.add_argument("--text-file", default=None,
+                    help="local jsonl corpus ({'text':...}/line) — OFFLINE (no HF streaming)")
     ap.add_argument("--reuse", default=None,
                     help="optional: top up an existing data/interim/<reuse> instead of "
                          "harvesting all fresh")
@@ -78,7 +80,8 @@ def main() -> None:
     # of docs) so we stream ~N docs, not ~50N: train_nla does its own 80/20 split of this set,
     # so the harvest-level eval bucket is unused here.
     hc = HarvestConfig(target_model=args.target_model, layer_l=args.layer, n_samples=args.n * 3,
-                       max_snippet_tokens=96, pooling=args.pooling, split="train", seed=777)
+                       max_snippet_tokens=96, pooling=args.pooling, split="train",
+                       text_file=args.text_file, seed=777)
     new = []
     for rec in harvest_activations(hc):
         if rec["input_id"] in have:

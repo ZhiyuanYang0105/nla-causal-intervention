@@ -9,18 +9,21 @@
 
 ## ⭐ 推荐路径:HPC(A100/H100)+ SLURM
 
-代码已**自动选设备**(`cuda > mps > cpu`),mac 和 HPC 同一套。HPC 一键三阶段:
+代码已**自动选设备**(`cuda > mps > cpu`),mac 和 HPC 同一套。**两步**:
 
 ```bash
-sbatch scripts/run_hpc.slurm        # 从仓库根目录提交;配置 experiments/exp05_hpc/config.yaml
+bash scripts/hpc_setup.sh           # STEP 1 登录节点(有网,无 GPU):环境+依赖+预下模型+预取 FineWeb 切片
+sbatch scripts/run_hpc.slurm        # STEP 2 GPU 作业:离线三阶段;配置 experiments/exp05_hpc/config.yaml
 ```
 
-`run_hpc.slurm` 跑:① `build_nla_data`(1.5B 采集 + **7B-Instruct** 批量摘要)→
-② `train_nla`(warm-start + GRPO)→ ③ `steg_intervention`(门控分析 + 判定)。
+**为什么分两步**:许多集群计算节点**断网**。`hpc_setup.sh` 在登录节点备好模型(`huggingface-cli download`)
+和本地语料(FineWeb 切片 → `data/raw/fineweb_slice.jsonl`);GPU 作业用 `--text-file` + `HF_HUB_OFFLINE=1`
+**全程离线**跑,既兼容断网计算节点,又不浪费付费 GPU 时间下载/装包。`run_hpc.slurm` 跑:
+① `build_nla_data`(1.5B 采集 + **7B-Instruct** 摘要)→ ② `train_nla`(warm-start + GRPO)→
+③ `steg_intervention`(门控分析 + 判定)。
 
-**提交前编辑 SLURM 头**(partition / GPU 约束)和 env 块(module/conda/HF cache)。脚本顶部的 knob:
-`N`(数据量,默认 20000)、`M`、`LAYER=14`、`POOLING=last`(论文)、`SUMMARIZER=Qwen2.5-7B-Instruct`、
-`WS_EPOCHS`、`GRPO_STEPS=1000`、`N_EVAL=500`。
+**提交前编辑**:`run_hpc.slurm` 的 SLURM 头(partition / GPU 约束)和 `conda activate` 行;
+两脚本 `HF_HOME` 要一致。脚本顶部 knob:`N=20000`、`LAYER=14`、`POOLING=last`、`GRPO_STEPS=1000`、`N_EVAL=500`。
 
 **为什么用 A100/H100 + 7B 改写器(对症本地的两个根本限制):**
 - 7B-Instruct 改写器**让负对照真能漂移**(0.5B 太弱、漂移≈第四种改写,门控会判 INVALID-CONTROL)。

@@ -23,6 +23,7 @@ class HarvestConfig:
     corpus: str = "HuggingFaceFW/fineweb"
     subset: str = "sample-10BT"
     streaming: bool = True
+    text_file: str | None = None      # local jsonl ({"text":...}/line) -> OFFLINE, no HF streaming
     n_samples: int | None = 200
     min_snippet_tokens: int = 16
     max_snippet_tokens: int = 128     # seq len cap
@@ -80,7 +81,21 @@ def harvest_activations(cfg: HarvestConfig | None = None, **overrides) -> Iterat
         cfg.target_model, dtype=getattr(torch, cfg.dtype)
     ).to(cfg.device).eval()
 
-    ds = load_dataset(cfg.corpus, name=cfg.subset, split="train", streaming=cfg.streaming)
+    # text source: a pre-fetched local jsonl ({"text": ...} per line, OFFLINE-capable) or
+    # streamed FineWeb. Local files are used as-is (no hash split — the file IS the curated set).
+    if cfg.text_file:
+        import json
+
+        def _local_docs():
+            with open(cfg.text_file) as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        yield json.loads(line)
+        ds, use_split = _local_docs(), False
+    else:
+        ds = load_dataset(cfg.corpus, name=cfg.subset, split="train", streaming=cfg.streaming)
+        use_split = True
 
     batch: list[dict] = []
     yielded = 0
@@ -118,8 +133,8 @@ def harvest_activations(cfg: HarvestConfig | None = None, **overrides) -> Iterat
 
     try:
         for i, record in enumerate(ds):
-            doc_id = record.get("id") or f"fineweb-{i}"
-            if _split_of(doc_id, cfg) != cfg.split:
+            doc_id = record.get("id") or f"doc-{i}"
+            if use_split and _split_of(doc_id, cfg) != cfg.split:
                 continue
             ids = tok(record["text"], truncation=False)["input_ids"]
             if len(ids) < cfg.min_snippet_tokens:
