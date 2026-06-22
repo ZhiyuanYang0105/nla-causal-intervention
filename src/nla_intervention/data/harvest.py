@@ -33,7 +33,7 @@ class HarvestConfig:
     store_dtype: str = "float32"      # fp16 overflows on Qwen-style outlier activations
     batch_size: int = 16
     dtype: str = "float32"            # model compute dtype (fp16 can produce inf/nan)
-    device: str = "mps"
+    device: str | None = None         # None -> auto (cuda > mps > cpu)
     seed: int = 20260612
 
 
@@ -69,6 +69,8 @@ def harvest_activations(cfg: HarvestConfig | None = None, **overrides) -> Iterat
     cfg = cfg or HarvestConfig()
     for k, v in overrides.items():
         setattr(cfg, k, v)
+    from nla_intervention.utils import resolve_device
+    cfg.device = resolve_device(cfg.device)               # cuda > mps > cpu
     rng = np.random.default_rng(cfg.seed)
 
     tok = AutoTokenizer.from_pretrained(cfg.target_model)

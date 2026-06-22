@@ -18,11 +18,13 @@ AR_PROMPT = "Concept description: {z}\nActivation:"
 
 class ActivationReconstructor(nn.Module):
     def __init__(self, model_name: str, layer_l: int, hidden_size: int,
-                 device: str = "mps", dtype=torch.float32, lora: bool = True, lora_r: int = 16,
+                 device: str | None = None, dtype=torch.float32, lora: bool = True, lora_r: int = 16,
                  adapter_path: str | None = None, affine_path: str | None = None):
         super().__init__()
         from transformers import AutoModelForCausalLM, AutoTokenizer
+        from nla_intervention.utils import resolve_device
 
+        device = resolve_device(device)                    # cuda > mps > cpu
         self.device, self.layer_l = device, layer_l
         self.tok = AutoTokenizer.from_pretrained(model_name)
         if self.tok.pad_token is None:

@@ -24,18 +24,21 @@ SUMMARY_PROMPT = ("Summarize the following text in 1-2 sentences, capturing its 
 
 def _summarizer(model_name="Qwen/Qwen2.5-0.5B-Instruct"):
     from transformers import AutoModelForCausalLM, AutoTokenizer
+    from nla_intervention.utils import resolve_device
+    dev = resolve_device()
+    dt = torch.bfloat16 if dev == "cuda" else torch.float32   # bf16 inference on GPU (saves VRAM)
     tok = AutoTokenizer.from_pretrained(model_name)
     tok.padding_side = "left"                                  # left-pad for batched decode
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
-    m = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32).to("mps").eval()
+    m = AutoModelForCausalLM.from_pretrained(model_name, dtype=dt).to(dev).eval()
 
     def summarize_batch(texts: list[str]) -> list[str]:
         prompts = [tok.apply_chat_template(
             [{"role": "user", "content": SUMMARY_PROMPT.format(text=t)}],
             add_generation_prompt=True, tokenize=False) for t in texts]
         enc = tok(prompts, return_tensors="pt", padding=True, truncation=True,
-                  max_length=160).to("mps")
+                  max_length=160).to(dev)
         n = enc["input_ids"].shape[1]
         with torch.no_grad():
             out = m.generate(**enc, max_new_tokens=48, do_sample=False,
@@ -48,6 +51,10 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default="exp04_nla")
     ap.add_argument("--n", type=int, default=2500)
+    ap.add_argument("--target-model", default="Qwen/Qwen2.5-0.5B")  # M (activations)
+    ap.add_argument("--layer", type=int, default=12)
+    ap.add_argument("--pooling", default="mean")              # "last" (paper) | "mean"
+    ap.add_argument("--summarizer", default="Qwen/Qwen2.5-0.5B-Instruct")  # use 7B-Instruct on HPC
     ap.add_argument("--reuse", default=None,
                     help="optional: top up an existing data/interim/<reuse> instead of "
                          "harvesting all fresh")
@@ -68,8 +75,8 @@ def main() -> None:
     have = set(ids)
 
     # harvest fresh activations (skip ids we already have)
-    hc = HarvestConfig(target_model="Qwen/Qwen2.5-0.5B", layer_l=12, n_samples=args.n * 3,
-                       max_snippet_tokens=96, pooling="mean", seed=777)
+    hc = HarvestConfig(target_model=args.target_model, layer_l=args.layer, n_samples=args.n * 3,
+                       max_snippet_tokens=96, pooling=args.pooling, seed=777)
     new = []
     for rec in harvest_activations(hc):
         if rec["input_id"] in have:
@@ -79,7 +86,7 @@ def main() -> None:
             break
     print(f"harvested {len(new)} new activations; generating summaries...")
 
-    summarize_batch, _ = _summarizer()
+    summarize_batch, _ = _summarizer(args.summarizer)
     B = 16
     for k in range(0, len(new), B):
         chunk = new[k:k + B]

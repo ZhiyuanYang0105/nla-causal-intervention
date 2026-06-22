@@ -1,5 +1,5 @@
 # exp04: scaled faithful NLA — 2500 (h_l, summary) pairs, stabilized GRPO.
-extends: configs/default.yaml
+extends: ../../configs/default.yaml
 
 experiment:
   id: exp04_nla

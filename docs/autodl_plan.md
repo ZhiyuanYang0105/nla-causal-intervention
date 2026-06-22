@@ -1,10 +1,37 @@
-# autodl / RTX 5090 上的忠实 NLA 复现方案（runbook）
+# HPC / GPU 上的忠实 NLA 复现方案（runbook）
 
-目标:在一张 **RTX 5090(32GB)** 上,用 **Qwen2.5-1.5B** 做**方法层面对论文忠实**的 NLA,
-并以足够功效**判定隐写(H1 语义通道 vs H2 表面/隐写通道)**。
+目标:用 **Qwen2.5-1.5B** 做**方法层面对论文忠实**的 NLA,并以足够功效**判定隐写(H1 语义通道 vs H2 表面/隐写通道)**。
 
 > 边界(诚实):模型规模仍远小于论文的 Claude 级(官方未公布参数量),所以这是"**方法忠实、规模缩小**"的复现。
-> 结论是"**关于这个 1.5B NLA、在给定 β 下**"的可信科学结论,不自动推广到 Claude 级。
+> 结论是"**关于这个 1.5B NLA**"的可信科学结论,不自动推广到 Claude 级。
+
+---
+
+## ⭐ 推荐路径:HPC(A100/H100)+ SLURM
+
+代码已**自动选设备**(`cuda > mps > cpu`),mac 和 HPC 同一套。HPC 一键三阶段:
+
+```bash
+sbatch scripts/run_hpc.slurm        # 从仓库根目录提交;配置 experiments/exp05_hpc/config.yaml
+```
+
+`run_hpc.slurm` 跑:① `build_nla_data`(1.5B 采集 + **7B-Instruct** 批量摘要)→
+② `train_nla`(warm-start + GRPO)→ ③ `steg_intervention`(门控分析 + 判定)。
+
+**提交前编辑 SLURM 头**(partition / GPU 约束)和 env 块(module/conda/HF cache)。脚本顶部的 knob:
+`N`(数据量,默认 20000)、`M`、`LAYER=14`、`POOLING=last`(论文)、`SUMMARIZER=Qwen2.5-7B-Instruct`、
+`WS_EPOCHS`、`GRPO_STEPS=1000`、`N_EVAL=500`。
+
+**为什么用 A100/H100 + 7B 改写器(对症本地的两个根本限制):**
+- 7B-Instruct 改写器**让负对照真能漂移**(0.5B 太弱、漂移≈第四种改写,门控会判 INVALID-CONTROL)。
+- 1.5B + 更多数据 → **更强更稳的 FVE**,干预测试才有功效。
+
+**显存**:LoRA(r=32)1.5B 在 40GB 上轻松(训练时 AV+AR+冻结 ref ≈ 15GB fp32);
+7B 摘要器/改写器用 **bf16 推理**(~14GB)。**推荐 80GB** 留足余量。
+
+**忠实度**:`exp05_hpc` 用末 token 池化(论文)、激活单位归一化、精确 KL、截断 AR。仍存的偏差(都在
+[nla_faithful_findings.md](nla_faithful_findings.md) 的核查表):LoRA 而非全量微调(#C)、reward −MSE 非 −log(#B)、
+GRPO 无 PPO clip(#A)、AR 多步回放(#E)——若要进一步消除,需在 HPC 上启用全量微调(需额外的 save/load 支持)。
 
 ---
 

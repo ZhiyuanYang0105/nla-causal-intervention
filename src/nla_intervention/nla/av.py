@@ -22,12 +22,13 @@ PROMPT_SUFFIX = "\nDescription:"
 
 
 class ActivationVerbalizer:
-    def __init__(self, model_name: str, device: str = "mps", dtype=torch.float32,
+    def __init__(self, model_name: str, device: str | None = None, dtype=torch.float32,
                  act_scale: float | None = None, lora: bool = True, lora_r: int = 16,
                  adapter_path: str | None = None):
         from transformers import AutoModelForCausalLM, AutoTokenizer
+        from nla_intervention.utils import resolve_device
 
-        self.device = device
+        self.device = device = resolve_device(device)      # cuda > mps > cpu
         self.tok = AutoTokenizer.from_pretrained(model_name)
         if self.tok.pad_token is None:
             self.tok.pad_token = self.tok.eos_token

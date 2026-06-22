@@ -75,6 +75,12 @@ pip install -e ".[models,nlp]" && pip install peft
 make nla-data               # 采集激活 + 摘要
 make train-nla              # warm-start + GRPO 联合训练(数小时)
 make steg                   # 隐写干预测试
+
+# HPC(A100/H100,1.5B + 7B-Instruct 改写器):
+sbatch scripts/run_hpc.slurm   # 一键三阶段;配置见 experiments/exp05_hpc/config.yaml
 ```
 
-> 本地 0.5B/MacBook 规模:方法忠实但功效受限(结论 UNDETERMINED)。要得到可判定的结果,见 autodl_plan(单张 5090 + 1.5B 全量微调)。
+代码自动选设备(`cuda > mps > cpu`),mac / HPC 同一套代码。**推荐到 A100/H100 上用 1.5B 跑**(`exp05_hpc`):
+更强的 M + 更强的 7B-Instruct 改写器(让负对照真能漂移)+ 末 token 池化(论文)→ 才有足够功效给出 H1/H2 判定。
+
+> 本地 0.5B/MacBook:方法忠实但功效受限(UNDETERMINED)。要得到可判定结果,用 HPC 的 `exp05_hpc`(见 [autodl_plan.md](docs/autodl_plan.md))。

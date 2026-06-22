@@ -1,0 +1,39 @@
+# exp05: HPC run — Qwen2.5-1.5B on A100/H100. Stronger model + stronger rewriter
+# (7B-Instruct) so the negative control actually drifts. Data built by run_hpc.slurm.
+extends: ../../configs/default.yaml
+
+experiment:
+  id: exp05_hpc
+  description: "Faithful NLA at 1.5B (Qwen2.5-1.5B) on A100/H100; 7B-Instruct rewriter."
+
+target_model:
+  name: Qwen/Qwen2.5-1.5B      # M (activations); 28 layers, hidden 1536
+  layer_l: 14                  # middle layer
+  hidden_size: 1536
+
+train:
+  warmstart_from: exp05_hpc    # data/interim/exp05_hpc (built by build_nla_data.py)
+  lora_r: 32                   # higher rank for the bigger model (toward full-FT quality)
+  ws_lr: 1.0e-4
+  ar_lr: 5.0e-4
+  weight_decay: 0.05
+  # GRPO (stabilized)
+  group: 8
+  grpo_batch: 8
+  kl_beta: 0.02
+  grpo_lr_av: 1.0e-5
+  grpo_lr_ar: 2.0e-4
+  ar_steps: 4
+
+paraphraser:                   # AV summaries (build) + intervention rewrites (steg)
+  model: Qwen/Qwen2.5-7B-Instruct   # strong enough to produce real drift / faithful paraphrase
+
+embedding:
+  model: sentence-transformers/all-mpnet-base-v2   # better sim for the manipulation check
+
+data:
+  pooling: last                # paper's final-token readout (HPC scale should support it)
+  seed: 20260612
+
+conditions:
+  enabled: [C0, C1, C2, C3, C4]

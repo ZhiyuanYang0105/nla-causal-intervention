@@ -51,13 +51,16 @@ TAU_KEEP, TAU_DRIFT = 0.85, 0.60
 
 def _make_rewriter(model_name="Qwen/Qwen2.5-0.5B-Instruct"):
     from transformers import AutoModelForCausalLM, AutoTokenizer
+    from nla_intervention.utils import resolve_device
+    dev = resolve_device()
+    dt = torch.bfloat16 if dev == "cuda" else torch.float32   # bf16 inference on GPU
     tok = AutoTokenizer.from_pretrained(model_name)
-    m = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32).to("mps").eval()
+    m = AutoModelForCausalLM.from_pretrained(model_name, dtype=dt).to(dev).eval()
 
     def complete(prompt: str) -> str:
         enc = tok.apply_chat_template([{"role": "user", "content": prompt}],
                                       add_generation_prompt=True, return_tensors="pt",
-                                      return_dict=True).to("mps")
+                                      return_dict=True).to(dev)
         n = enc["input_ids"].shape[1]
         with torch.no_grad():
             out = m.generate(**enc, max_new_tokens=48, do_sample=False, pad_token_id=tok.eos_token_id)
@@ -128,16 +131,11 @@ def analyze(df: pd.DataFrame) -> dict:
     #    fragile (random-effect-collapsed) p-value is not trusted silently.
     rep["mechanism"] = {}
     try:
-        import warnings
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            res = S.mechanism_regression(dff, value="cosine", keep_conditions=KEEP, baseline="C0")
-        boundary = any("boundary" in str(x.message).lower() or "converg" in str(x.message).lower()
-                       for x in w)
+        res = S.mechanism_regression(dff, value="cosine", keep_conditions=KEEP, baseline="C0")
         rep["mechanism"] = {"surface_shift_coef": float(res.params.get("surface_shift", np.nan)),
                             "surface_shift_p": float(res.pvalues.get("surface_shift", np.nan)),
                             "sim_zz_prime_p": float(res.pvalues.get("sim_zz_prime", np.nan)),
-                            "boundary_or_nonconverged": bool(boundary)}
+                            "method": getattr(res, "_nla_method", "?")}
     except Exception as e:
         rep["mechanism"] = {"error": str(e)}
 
@@ -148,9 +146,10 @@ def analyze(df: pd.DataFrame) -> dict:
     drift_sig = bool(sp.loc["C4", "significant"]) if "C4" in sp.index else False
     m = rep["mechanism"]
     surf_p, surf_coef = m.get("surface_shift_p", np.nan), m.get("surface_shift_coef", np.nan)
+    # H2 needs surface_shift significant AND positive (OLS-clustered fallback already handles
+    # random-intercept collapse, so no boundary veto here).
     surf_ok = (isinstance(surf_p, float) and surf_p == surf_p and surf_p < 0.05
-               and isinstance(surf_coef, float) and surf_coef > 0
-               and not m.get("boundary_or_nonconverged", False))
+               and isinstance(surf_coef, float) and surf_coef > 0)
 
     if not drift_ok:
         verdict = "INVALID-CONTROL: 负对照(漂移)未生效(C4 sim 未达标),无法判别 H1/H2"
@@ -202,10 +201,12 @@ def main() -> None:
     av = ActivationVerbalizer(mname, dtype=torch.float32, adapter_path=str(ck / "av_lora"))
     ar = ActivationReconstructor(mname, layer_l=layer, hidden_size=hid, dtype=torch.float32,
                                  adapter_path=str(ck / "ar_lora"), affine_path=str(ck / "ar_affine.pt"))
-    rewriter = _make_rewriter()
+    rw_model = cfg.get("paraphraser", {}).get("model", "Qwen/Qwen2.5-0.5B-Instruct")
+    rewriter = _make_rewriter(rw_model)
+    emb_model = cfg.get("embedding", {}).get("model", "all-MiniLM-L6-v2").split("/")[-1]
     try:
         from nla_intervention.metrics import SentenceTransformerEmbedder
-        embedder = SentenceTransformerEmbedder("all-MiniLM-L6-v2")
+        embedder = SentenceTransformerEmbedder(emb_model)
     except Exception:
         embedder = None
 

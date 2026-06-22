@@ -224,8 +224,19 @@ def mechanism_regression(
     """Core semantic-vs-surface test on the semantic-preserving subset.
 
     Builds delta_fve (= fve_baseline - fve) and surface_shift if absent, restricts to
-    keep_conditions, then fits the mixed model. A significant positive surface_shift
-    coefficient (sim controlled) => AV encoded activation info in surface form (H2/H3)."""
+    keep_conditions, then fits `delta_fve ~ surface_shift + sim_zz_prime + len_ratio` with a
+    random intercept per input. A significant POSITIVE surface_shift coefficient (sim
+    controlled) => more surface change predicts a larger reconstruction drop = surface/
+    steganographic channel (H2).
+
+    Returns a fitted statsmodels result with `.params`/`.pvalues`. With paired within-input
+    deltas the random intercept routinely collapses to the boundary (group var ~ 0); when
+    that happens the fixed-effect inference is still valid, so we FALL BACK to OLS with
+    cluster-robust SE by input — avoiding a fragile/boundary mixed-model p-value. The
+    returned object carries `._nla_method` = "mixedlm" | "ols_clustered"."""
+    import warnings
+    import statsmodels.formula.api as smf
+
     d = df.copy()
     if "surface_shift" not in d.columns:
         d["surface_shift"] = compute_surface_shift(d)
@@ -234,8 +245,21 @@ def mechanism_regression(
         d["delta_fve"] = d.apply(
             lambda r: base.get(r["input_id"], np.nan) - r[value], axis=1)
     sub = d[d["condition"].isin(keep_conditions)].dropna(
-        subset=["delta_fve", "surface_shift"])
-    return _fit_mixedlm(sub, formula)
+        subset=["delta_fve", "surface_shift"]).copy()
+    fixed, group = _parse_random_group(formula)
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        res = smf.mixedlm(fixed, sub, groups=sub[group]).fit()
+    re_var = float(np.asarray(res.cov_re).ravel()[0]) if getattr(res, "cov_re", None) is not None else 0.0
+    collapsed = re_var < 1e-3 or any(
+        "boundary" in str(x.message).lower() or "converg" in str(x.message).lower() for x in w)
+    if collapsed:                                          # RE collapsed -> OLS + cluster-robust SE
+        res = smf.ols(fixed, sub).fit(cov_type="cluster", cov_kwds={"groups": sub[group]})
+        res._nla_method = "ols_clustered"
+    else:
+        res._nla_method = "mixedlm"
+    return res
 
 
 # ---- 5. power -------------------------------------------------------------
