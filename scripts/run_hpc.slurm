@@ -35,12 +35,12 @@ conda activate nla 2>/dev/null || { conda create -y -n nla python=3.11 && conda 
 
 # Put HF/torch caches on fast scratch (avoid home-quota blowups). Edit SCRATCH.
 export SCRATCH="${SCRATCH:-$PROJECT_DIR/.scratch}"
-export HF_HOME="$SCRATCH/hf"; export HF_HUB_ENABLE_HF_TRANSFER=1
+export HF_HOME="$SCRATCH/hf"
 export TOKENIZERS_PARALLELISM=false; export PYTHONUNBUFFERED=1
 # export HF_ENDPOINT=https://hf-mirror.com    # uncomment if HF is blocked on your cluster
 
 python -c "import torch" 2>/dev/null || pip install -q torch --index-url https://download.pytorch.org/whl/cu124
-pip install -q -e ".[models,nlp]" && pip install -q peft
+pip install -q -e ".[models,nlp]"            # includes peft
 python -c "import torch;print('CUDA:',torch.cuda.is_available(),torch.cuda.get_device_name(0))"
 
 export PYTHONPATH="$PROJECT_DIR/src:${PYTHONPATH:-}"

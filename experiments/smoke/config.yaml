@@ -1,0 +1,38 @@
+# Tiny end-to-end smoke (0.5B) — exercises the SAME code path as exp05_hpc with a small
+# model + tiny N, to validate the pipeline runs before a paid GPU run. NOT a real experiment.
+extends: ../../configs/default.yaml
+
+experiment:
+  id: smoke
+  description: "End-to-end pipeline smoke (Qwen2.5-0.5B, tiny N)."
+
+target_model:
+  name: Qwen/Qwen2.5-0.5B
+  layer_l: 12
+  hidden_size: 896
+
+train:
+  warmstart_from: smoke
+  lora_r: 8
+  ws_lr: 1.0e-4
+  ar_lr: 5.0e-4
+  weight_decay: 0.05
+  group: 4
+  grpo_batch: 2
+  kl_beta: 0.02
+  grpo_lr_av: 1.0e-5
+  grpo_lr_ar: 2.0e-4
+  ar_steps: 2
+
+paraphraser:
+  model: Qwen/Qwen2.5-0.5B-Instruct
+
+embedding:
+  model: sentence-transformers/all-MiniLM-L6-v2
+
+data:
+  pooling: last
+  seed: 20260612
+
+conditions:
+  enabled: [C0, C1, C2, C3, C4]

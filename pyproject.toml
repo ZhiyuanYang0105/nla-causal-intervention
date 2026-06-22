@@ -22,13 +22,14 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# LOCAL: frozen M (Llama-3.2-1B/3B) activation harvest + frozen-M readout (MPS).
+# Models: activation harvest + AV/AR training (Qwen via transformers; LoRA via peft).
 models = [
     "torch>=2.2",
-    "transformers>=4.45",      # Llama-3.2
+    "transformers>=4.45",      # Qwen2.5
     "datasets>=2.20",          # FineWeb (streaming)
     "accelerate>=0.33",
     "huggingface-hub>=0.24",
+    "peft>=0.11",              # LoRA for AV/AR
 ]
 # Fast generation on Apple silicon (AV summaries + paraphrasing). Recommended locally.
 mlx = [
