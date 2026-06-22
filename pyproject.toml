@@ -25,7 +25,7 @@ dependencies = [
 # Models: activation harvest + AV/AR training (Qwen via transformers; LoRA via peft).
 models = [
     "torch>=2.2",
-    "transformers>=4.45",      # Qwen2.5
+    "transformers>=4.56",      # Qwen2.5; >=4.56 for the `dtype=` from_pretrained kwarg
     "datasets>=2.20",          # FineWeb (streaming)
     "accelerate>=0.33",
     "huggingface-hub>=0.24",

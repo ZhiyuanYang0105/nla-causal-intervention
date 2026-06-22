@@ -74,9 +74,11 @@ def main() -> None:
         print(f"harvesting all {args.n} pairs fresh")
     have = set(ids)
 
-    # harvest fresh activations (skip ids we already have)
+    # harvest fresh activations (skip ids we already have). Use the "train" hash bucket (~98%
+    # of docs) so we stream ~N docs, not ~50N: train_nla does its own 80/20 split of this set,
+    # so the harvest-level eval bucket is unused here.
     hc = HarvestConfig(target_model=args.target_model, layer_l=args.layer, n_samples=args.n * 3,
-                       max_snippet_tokens=96, pooling=args.pooling, seed=777)
+                       max_snippet_tokens=96, pooling=args.pooling, split="train", seed=777)
     new = []
     for rec in harvest_activations(hc):
         if rec["input_id"] in have:
