@@ -22,6 +22,11 @@ from nla_intervention.nla import train as T
 from nla_intervention.utils import load_config
 
 ROOT = Path(__file__).resolve().parents[1]
+# Power gates (docs/autodl_plan.md runbook): warm-start AR-only FVE >= 0.30, post-GRPO chain
+# FVE >= 0.40. Below these the intervention test is UNDERPOWERED and its verdict reflects
+# under-training, not a real semantic/surface channel. We persist + flag this LOUDLY so a clean
+# exit 0 cannot be mistaken for a powered result (steg reads gate_status.json and surfaces it).
+GATE_AR_FVE, GATE_CHAIN_FVE = 0.30, 0.40
 
 
 def main() -> None:
@@ -90,6 +95,30 @@ def main() -> None:
                      ar_steps=tc.get("ar_steps", 4), eval_H=H[ev][:100])  # 100-subset eval (faster)
         fve_g = T.eval_fve(av, ar, H[ev])
         print(f"GRPO 后 eval FVE: {fve_g:+.3f}")
+
+    # ---- power gates: persist + flag LOUDLY (non-fatal; steg surfaces this in its report) ----
+    final_chain = float(fve_g) if args.grpo else float(fve_chain)
+    gate = {
+        "warmstart_ar_only_fve": round(float(fve_ar), 4),
+        "warmstart_chain_fve": round(float(fve_chain), 4),
+        "final_chain_fve": round(final_chain, 4),
+        "grpo": bool(args.grpo),
+        "gate_ar_only": {"threshold": GATE_AR_FVE, "pass": bool(fve_ar >= GATE_AR_FVE)},
+        "gate_chain": {"threshold": GATE_CHAIN_FVE, "pass": bool(final_chain >= GATE_CHAIN_FVE)},
+    }
+    (out / "ckpt/gate_status.json").write_text(json.dumps(gate, indent=2))
+    if gate["gate_ar_only"]["pass"] and gate["gate_chain"]["pass"]:
+        print(f"\n✅ 功效闸门通过: AR-only={fve_ar:+.3f} (≥{GATE_AR_FVE}) | "
+              f"chain={final_chain:+.3f} (≥{GATE_CHAIN_FVE}) — 干预测试有功效")
+    else:
+        bar = "!" * 72
+        print(f"\n{bar}\n⚠️  功效闸门未通过 — 干预测试将欠功效,其判定大概率为 UNDETERMINED")
+        print(f"    (这是训练不足所致,不是真实的 H1/H2 结论)")
+        print(f"    AR-only FVE = {fve_ar:+.3f}  需 ≥ {GATE_AR_FVE}  -> "
+              f"{'OK' if gate['gate_ar_only']['pass'] else 'FAIL'}")
+        print(f"    chain FVE   = {final_chain:+.3f}  需 ≥ {GATE_CHAIN_FVE}  -> "
+              f"{'OK' if gate['gate_chain']['pass'] else 'FAIL'}")
+        print(f"    建议先过闸门(更多数据/GRPO 步数/调 reward)再据此做隐写判定。\n{bar}")
 
     # save checkpoints
     av.model.save_pretrained(out / "ckpt/av_lora")

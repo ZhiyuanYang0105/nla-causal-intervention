@@ -5,7 +5,7 @@
 ##SBATCH --constraint=a100_80gb         # <-- uncomment/edit for your cluster's 80GB tag
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
-#SBATCH --time=24:00:00
+#SBATCH --time=48:00:00                 # GRPO gen + 7B summarizing 20k docs can exceed 24h; lower to your partition's max if it rejects 48h
 #SBATCH --output=nla-%j.out
 #SBATCH --error=nla-%j.err
 #

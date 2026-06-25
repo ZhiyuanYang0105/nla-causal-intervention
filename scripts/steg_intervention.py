@@ -46,7 +46,11 @@ CONDS = [
 ]
 KEEP = ("C1", "C2", "C3")     # semantic-preserving conditions
 DRIFT = ("C4",)               # negative control
-TAU_KEEP, TAU_DRIFT = 0.85, 0.60
+# Calibrated for the HPC embedder (all-mpnet-base-v2): at 0.85, mpnet keeps only ~38% of genuine
+# strong paraphrases (decimates C2, the key H2 signal); 0.80 keeps ~62% while still requiring high
+# semantic similarity. RE-CHECK on a few hundred real (z, paraphrase) pairs before the eval budget.
+TAU_KEEP, TAU_DRIFT = 0.80, 0.60
+DZ_NEGLIGIBLE = 0.2           # |cohen_dz| below this = negligible effect (H1 paraphrase drop)
 
 
 def _make_rewriter(model_name="Qwen/Qwen2.5-0.5B-Instruct"):
@@ -139,29 +143,43 @@ def analyze(df: pd.DataFrame) -> dict:
     except Exception as e:
         rep["mechanism"] = {"error": str(e)}
 
-    # 4) verdict (gated). H2 requires surface_shift to be SIGNIFICANT *and POSITIVE* (more
-    #    surface change -> larger reconstruction drop), from a converged model.
+    # 4) verdict (gated). The mechanism regression is THE H1/H2 discriminator, so a verdict is
+    #    read ONLY when it produced a valid (converged/finite) fit — otherwise UNDETERMINED, never
+    #    an H1 resting on the pairwise pattern alone. H2 = surface_shift significant & positive
+    #    (controlling for sim); that discriminator alone suffices (decoupled from per-condition
+    #    pairwise hits). H1 = drift dropped reconstruction while paraphrase effects are NEGLIGIBLE
+    #    by effect SIZE (|cohen_dz| < DZ_NEGLIGIBLE) — a trivial non-zero drop must not deny a
+    #    faithful model its H1 — AND surface_shift is not significant.
     sp = tbl.set_index("condition")
-    para_sig = sum(bool(sp.loc[c, "significant"]) for c in KEEP if c in sp.index)
     drift_sig = bool(sp.loc["C4", "significant"]) if "C4" in sp.index else False
+    para_dz = [abs(float(sp.loc[c, "cohen_dz"])) for c in KEEP
+               if c in sp.index and np.isfinite(sp.loc[c, "cohen_dz"])]
+    para_negligible = len(para_dz) > 0 and max(para_dz) < DZ_NEGLIGIBLE
     m = rep["mechanism"]
     surf_p, surf_coef = m.get("surface_shift_p", np.nan), m.get("surface_shift_coef", np.nan)
-    # H2 needs surface_shift significant AND positive (OLS-clustered fallback already handles
-    # random-intercept collapse, so no boundary veto here).
-    surf_ok = (isinstance(surf_p, float) and surf_p == surf_p and surf_p < 0.05
-               and isinstance(surf_coef, float) and surf_coef > 0)
+    mech_valid = (m.get("method") in ("mixedlm", "ols_clustered")
+                  and isinstance(surf_p, float) and np.isfinite(surf_p))
+    surf_ok = (mech_valid and surf_p < 0.05
+               and isinstance(surf_coef, float) and np.isfinite(surf_coef) and surf_coef > 0)
 
     if not drift_ok:
         verdict = "INVALID-CONTROL: 负对照(漂移)未生效(C4 sim 未达标),无法判别 H1/H2"
     elif omni["p_value"] >= 0.05:
         verdict = "UNDETERMINED: omnibus 不显著(功效/信号不足)"
-    elif surf_ok and para_sig >= 1:
+    elif not mech_valid:
+        verdict = "UNDETERMINED: 机制判别回归未收敛/不可用,不据此读 H1/H2"
+    elif surf_ok:
         verdict = "H2(表面/隐写): 控制 sim 后 surface_shift 显著且为正,解释重建下降"
-    elif drift_sig and para_sig == 0 and not surf_ok:
-        verdict = "H1(语义): 仅漂移降重建、改写不降、surface_shift 不显著"
+    elif drift_sig and para_negligible:
+        verdict = "H1(语义): 仅漂移降重建、改写效应可忽略(|dz|<%.1f)、surface_shift 不显著" % DZ_NEGLIGIBLE
     else:
-        verdict = "UNDETERMINED: 效应不一致 / 机制回归不显著或不收敛"
+        verdict = "UNDETERMINED: 效应不一致(改写效应非可忽略但 surface_shift 不显著)"
     rep["verdict"] = verdict
+    rep["verdict_inputs"] = {
+        "drift_sig": drift_sig,
+        "para_dz_max": round(max(para_dz), 3) if para_dz else None,
+        "para_negligible": bool(para_negligible),
+        "mech_valid": bool(mech_valid), "surf_ok": bool(surf_ok)}
     return rep
 
 
@@ -169,6 +187,8 @@ def _print(rep: dict) -> None:
     print(f"\nn_rows={rep['n_rows']} → 过滤后 n={rep['n_after_filter']} (完整配对 {rep.get('n_complete_case','?')})")
     print("manipulation 通过率:", rep["manipulation_pass_rate"], "| 负对照有效:", rep["drift_control_ok"])
     print("set-level FVE/条件:", rep["set_level_fve"])
+    if rep.get("power_warning"):                           # shown in BOTH the early-return + full paths
+        print("⚠️ " + rep["power_warning"])
     if "friedman_cosine" not in rep:                       # early-return (too few complete pairs)
         print(f"\n=== 判定 ===\n{rep['verdict']}")
         return
@@ -235,6 +255,16 @@ def main() -> None:
     out = ROOT / "results" / run_id
     df.to_csv(out / "intervention_metrics.csv", index=False)
     rep = analyze(df)
+    # surface the training power gates: a verdict from an UNDERPOWERED NLA (training failed the
+    # FVE gates) reflects under-training, not a real channel — make that unmissable in the report.
+    gate_file = ck / "gate_status.json"
+    if gate_file.exists():
+        gate = json.loads(gate_file.read_text())
+        rep["training_gates"] = gate
+        if not (gate["gate_ar_only"]["pass"] and gate["gate_chain"]["pass"]):
+            rep["power_warning"] = ("训练未过功效闸门(chain FVE %.3f / AR-only %.3f)—— 下面的判定"
+                                    "大概率是欠功效所致,而非真实的语义/表面通道。"
+                                    % (gate["final_chain_fve"], gate["warmstart_ar_only_fve"]))
     _print(rep)
     (out / "intervention_report.json").write_text(json.dumps(rep, indent=2, default=str))
     print(f"\nwrote {out}/intervention_metrics.csv + intervention_report.json")
