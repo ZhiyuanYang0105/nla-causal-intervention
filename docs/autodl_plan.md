@@ -32,8 +32,8 @@ sbatch scripts/run_hpc.slurm        # STEP 2 GPU 作业:离线三阶段;配置 e
 **显存**:LoRA(r=32)1.5B 在 40GB 上轻松(训练时 AV+AR+冻结 ref ≈ 15GB fp32);
 7B 摘要器/改写器用 **bf16 推理**(~14GB)。**推荐 80GB** 留足余量。
 
-**忠实度**:`exp05_hpc` 用末 token 池化(论文)、激活单位归一化、精确 KL、截断 AR。仍存的偏差(都在
-[nla_faithful_findings.md](nla_faithful_findings.md) 的核查表):LoRA 而非全量微调(#C)、reward −MSE 非 −log(#B)、
+**忠实度**:`exp05_hpc` 用末 token 池化(论文)、激活单位归一化、精确 KL、截断 AR、**−log 重建奖励(#B 已一致)**。仍存的偏差(都在
+[nla_faithful_findings.md](nla_faithful_findings.md) 的核查表):LoRA 而非全量微调(#C)、
 GRPO 无 PPO clip(#A)、AR 多步回放(#E)——若要进一步消除,需在 HPC 上启用全量微调(需额外的 save/load 支持)。
 
 ---
@@ -71,7 +71,7 @@ GRPO 时同时驻留:AV(全量) + AR(截断到 l 层,约半个) + 冻结 ref AV�
 |--|--|--|--|
 | **C** | LoRA → **全量微调** | `nla/av.py`,`nla/ar.py` | `lora=False`,训练全部参数;优化器用 `bitsandbytes.optim.AdamW8bit`;开 `model.gradient_checkpointing_enable()` |
 | **D** | mean-pool → **末 token** | `experiments/*/config.yaml` | `data.pooling: last`;`MReadoutFeatures(pooling="last")`(已支持) |
-| **B** | reward = **−log‖·‖²** | `nla/train.py` grpo | `r = -torch.log(((ar(zs)-h)**2).mean(dim=1) + 1e-6)` |
+| **B** ✅ 已完成 | reward = **−log‖·‖²** | `nla/train.py` grpo | 代码已用 `r = -torch.log(mse + 1e-6)`(无需再改) |
 | **E** | AR 回放多步 → **单步** | `nla/train.py` grpo | 去掉 replay,改为每轮对当前采样 z 做一步 MSE(论文做法) |
 | **A** | 简化 → **完整 GRPO(PPO clip)** | `nla/train.py` grpo | 采样时存 `logprob_old`;loss = `-min(ratio·adv, clip(ratio,1-ε,1+ε)·adv) + β·KL`,`ratio=exp(lp-lp_old)`,内层 1–2 个 mini-epoch,ε=0.2 |
 

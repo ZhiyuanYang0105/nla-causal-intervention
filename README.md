@@ -100,5 +100,5 @@ tests/          46 个单元测试
 - [HPC/GPU 复现 runbook](docs/autodl_plan.md) — A100/H100 + SLURM、β 扫描、多种子
 
 ## 忠实度边界(详见 findings)
-与论文一致:激活注入 AV、截断 AR + affine、解耦的 AV(RL)+AR(MSE) 联合训练、KL→warm-start、单位归一化激活、末 token 池化。
-为本地可行性保留的偏差:LoRA 而非全量微调、reward 用 −MSE 而非 −log、GRPO 未用 PPO clipping、AR 用回放多步。
+与论文一致:激活注入 AV、截断 AR + affine、解耦的 AV(RL)+AR(MSE) 联合训练、**−log 重建奖励**、KL→warm-start、单位归一化激活、末 token 池化。
+为本地可行性保留的偏差:LoRA 而非全量微调、GRPO 未用 PPO clipping、AR 用回放多步。

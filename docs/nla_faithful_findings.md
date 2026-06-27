@@ -11,7 +11,7 @@
 | **AV** | 激活注入:`h_l` 归一化×常数 → 替换占位 token 的 embedding → 自回归采样 z;LoRA | `src/nla_intervention/nla/av.py` |
 | **AR** | z 套固定 prompt → 过模型 → 取 `hidden_states[l]` 末 token → 学习的 affine map → ĥ_l;LoRA+affine | `nla/ar.py` |
 | **warm-start** | SFT:AV 学 h_l→s、AR 学 s→h_l;按 eval 早停 | `nla/train.py` |
-| **GRPO 联合** | 组采样 z、reward=−‖h_l−AR(z)‖²、AR 当固定打分器;AV 用 GRPO 策略梯度、AR 监督 MSE;**更新解耦**;KL-to-init 惩罚(LoRA disable 取 init) | `nla/train.py` |
+| **GRPO 联合** | 组采样 z、reward=−log‖h_l−AR(z)‖²、AR 当固定打分器;AV 用 GRPO 策略梯度、AR 监督 MSE;**更新解耦**;KL-to-init 惩罚(LoRA disable 取 init) | `nla/train.py` |
 
 架构 sanity 通过:注入真实 `h_l` → AV 生成连贯文本、序列 logprob 可微、AR 重建可微。
 
@@ -86,15 +86,15 @@
 | # | 项 | 论文 | 实现 | 原因 |
 |--|--|--|--|--|
 | A | GRPO 目标 | 完整 GRPO(组相对优势 + **PPO clipped ratio** + KL) | 组相对优势×logprob + KL,**无 clipping**(≈REINFORCE+组基线) | 实现简化 |
-| B | reward | −log‖h−AR(z)‖² | −MSE(均值) | 实现简化 |
+| ~~B~~ | reward | −log‖h−AR(z)‖² | **−log(MSE+1e-6)** | ✅ 已改为一致 |
 | C | 微调方式 | M 的**完整副本全量微调** | **LoRA** 适配器(冻结底座) | 16GB 硬约束 |
 | D | 激活池化 | **末 token** | **mean-pool** | 末 token 本地 FVE 近零 |
 | E | AR 更新 | 当前采样 z 上**单步** | 回放缓冲 **4 步/轮** | 稳定 GRPO |
 | — | 模型 | Opus 4.6/4.5 | Qwen2.5-0.5B / -Instruct | 你许可的替换 |
 
 **结论**:**训练算法的结构与论文一致**(激活注入 AV、affine AR、解耦的 AV 强化 + AR 监督联合训练、KL-to-init、warm-start),
-且关键 KL bug 已修。但**非逐字符忠实**:#A(GRPO 简化掉 clipping)、#B(reward 非 log)是算法层简化,
-#C/#D/#E 是本地可行性/稳定性妥协。#A/#B/#E 原则上可改严格;#C/#D 受硬件/本地信号限制。
+且关键 KL bug 已修、reward 也已改为论文的 −log(#B 现一致)。但仍**非逐字符忠实**:#A(GRPO 简化掉 clipping)是算法层简化,
+#C/#D/#E 是本地可行性/稳定性妥协。#A/#E 原则上可改严格;#C/#D 受硬件/本地信号限制。
 
 ## 要真正测隐写,需要(任一/组合)
 

@@ -3,7 +3,7 @@
 Mirrors transformer-circuits 2026 (only Opus-4.6 -> Qwen2.5-0.5B):
   warm-start : SFT AV on (h_l -> summary s), AR on (s -> h_l)        ~0.3-0.4 FVE
   joint      : AR via supervised MSE on sampled z;                    (z treated as input)
-               AV via GRPO with reward r=-||h_l-AR(z)||^2,            (AR a fixed scorer)
+               AV via GRPO with reward r=-log||h_l-AR(z)||^2,        (AR a fixed scorer)
                + KL penalty to the AV init (adapters disabled) for fluency.
 Updates are decoupled: no gradient flows AV<->AR within a step.
 """
@@ -83,16 +83,17 @@ def grpo_train(av, ar, H, *, ref_av=None, steps=200, group=8, batch=4, beta=0.02
                lr_av=1e-5, lr_ar=2e-4, ar_steps=4, ar_mb=16, buffer_cap=1024,
                max_new_tokens=32, eval_H=None, eval_every=10, log=print):
     """Joint training, STABILIZED. Each step:
-      1) sample a group of z per activation, reward = -MSE (AR fixed scorer)
+      1) sample a group of z per activation, reward = -log MSE (AR fixed scorer)
       2) AV: group-relative advantage * logprob + PER-TOKEN KL to AV_init
       3) AR: several minibatch MSE steps from a replay buffer of sampled (z, h)
 
     FAITHFULNESS NOTES (deviations from the paper, see docs/nla_faithful_findings.md):
       - #A This is a SIMPLIFIED GRPO: group-relative REINFORCE + KL, WITHOUT the
         PPO-style clipped importance ratio of canonical GRPO. An approximation.
-      - #B reward = -MSE (mean), whereas the paper uses r = -log||h - AR(z)||².
       - #E AR uses a replay buffer with `ar_steps` updates/iteration, vs the paper's
         single gradient step on the current sampled z (a stability choice).
+    Reward r = -log‖h - AR(z)‖² now matches the paper (#B); the group-relative advantage
+    standardizes it, so only the within-group ranking/spread drive the AV update.
     Matches the paper: activation-input AV, affine AR, decoupled AV/AR updates,
     group sampling, AR as fixed scorer, KL toward AV_init.
 
@@ -111,8 +112,9 @@ def grpo_train(av, ar, H, *, ref_av=None, steps=200, group=8, batch=4, beta=0.02
         for bi in idx:                                         # group sampling + rewards
             h = Ht[bi]
             zs = av.generate(h, n=group, max_new_tokens=max_new_tokens, temperature=1.0)
-            with torch.no_grad():
-                r = -((ar(zs) - h.unsqueeze(0)) ** 2).mean(dim=1)
+            with torch.no_grad():                              # paper reward: r = -log‖h - AR(z)‖²
+                mse = ((ar(zs) - h.unsqueeze(0)) ** 2).mean(dim=1)
+                r = -torch.log(mse + 1e-6)                     # +eps guards log(0); mse~1e-3 >> eps
             all_z.append(zs); all_h.append(h); all_reward.append(r)
             buffer.extend((z, h.detach()) for z in zs)
 
